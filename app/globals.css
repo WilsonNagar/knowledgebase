@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply text-gray-900;
+  }
+}
+
+@layer components {
+  .markdown-content {
+    @apply prose prose-lg max-w-none;
+  }
+  
+  .markdown-content h1 {
+    @apply text-3xl font-bold mt-8 mb-4;
+  }
+  
+  .markdown-content h2 {
+    @apply text-2xl font-semibold mt-6 mb-3;
+  }
+  
+  .markdown-content h3 {
+    @apply text-xl font-semibold mt-4 mb-2;
+  }
+  
+  .markdown-content code {
+    @apply bg-gray-100 px-1 py-0.5 rounded text-sm font-mono;
+  }
+  
+  .markdown-content pre {
+    @apply bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto;
+  }
+  
+  .markdown-content pre code {
+    @apply bg-transparent p-0 text-sm;
+  }
+  
+  .markdown-content blockquote {
+    @apply border-l-4 border-gray-300 pl-4 italic;
+  }
+  
+  .markdown-content ul, .markdown-content ol {
+    @apply my-4 ml-6;
+  }
+  
+  .markdown-content li {
+    @apply my-2;
+  }
+  
+  .markdown-content a {
+    @apply text-blue-600 hover:text-blue-800 underline;
+  }
+  
+  .markdown-content table {
+    @apply border-collapse border border-gray-300 my-4;
+  }
+  
+  .markdown-content th, .markdown-content td {
+    @apply border border-gray-300 px-4 py-2;
+  }
+  
+  .markdown-content th {
+    @apply bg-gray-100 font-semibold;
+  }
+}
+
+/* Mermaid diagram styling */
+.mermaid {
+  @apply my-8 flex justify-center;
+}
+
+/* Syntax highlighting */
+.hljs {
+  @apply bg-gray-900 text-gray-100;
+}
+
+
