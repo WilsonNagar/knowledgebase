@@ -6,11 +6,13 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const level = searchParams.get('level');
     const knowledgebase = searchParams.get('knowledgebase') || 'android';
+    const topic = searchParams.get('topic');
     const tags = searchParams.get('tags')?.split(',');
     
     const files = getFiles({
       level: level || undefined,
       knowledgebase,
+      topic: topic || undefined,
       tags: tags || undefined,
     });
     

@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const query = searchParams.get('q') || '';
     const level = searchParams.get('level');
     const knowledgebase = searchParams.get('knowledgebase') || 'android';
+    const topic = searchParams.get('topic');
     
     if (!query.trim()) {
       return NextResponse.json({ files: [] });
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
     const files = searchFiles(query, {
       level: level || undefined,
       knowledgebase,
+      topic: topic || undefined,
     });
     
     return NextResponse.json({ files });
@@ -26,5 +28,6 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
 
 

@@ -16,22 +16,32 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { knowledgebase } = await request.json();
-    const path = knowledgebase || './android';
+    const body = await request.json().catch(() => ({}));
+    const knowledgebase = body.knowledgebase || 'android';
+    
+    // Map knowledgebase names to paths
+    const knowledgebasePaths: Record<string, string> = {
+      'android': './android',
+      'computer_science': './computer_science',
+      'computer-science': './computer_science',
+    };
+    
+    const path = knowledgebasePaths[knowledgebase] || `./${knowledgebase}`;
     
     indexFiles(path);
     
     return NextResponse.json({ 
       success: true, 
-      message: `Indexed ${knowledgebase || 'android'} knowledge base` 
+      message: `Indexed ${knowledgebase} knowledge base` 
     });
   } catch (error) {
     console.error('Error indexing:', error);
     return NextResponse.json(
-      { error: 'Failed to index knowledge base' },
+      { error: 'Failed to index knowledge base', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }
 }
+
 
 

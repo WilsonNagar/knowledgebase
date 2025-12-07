@@ -9,6 +9,7 @@ export default function BrowsePage() {
   const searchParams = useSearchParams();
   const level = searchParams.get('level');
   const knowledgebase = searchParams.get('knowledgebase') || 'android';
+  const topic = searchParams.get('topic');
   const [files, setFiles] = useState<KnowledgeFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -20,6 +21,7 @@ export default function BrowsePage() {
         const params = new URLSearchParams();
         if (level) params.set('level', level);
         params.set('knowledgebase', knowledgebase);
+        if (topic) params.set('topic', topic);
         
         const res = await fetch(`/api/files?${params.toString()}`);
         const data = await res.json();
@@ -32,7 +34,7 @@ export default function BrowsePage() {
     };
 
     fetchFiles();
-  }, [level, knowledgebase]);
+  }, [level, knowledgebase, topic]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,7 +71,10 @@ export default function BrowsePage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-4">
-          Browse Knowledge Base
+          {topic 
+            ? `Browse ${topic.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}`
+            : 'Browse Knowledge Base'
+          }
         </h1>
         
         <form onSubmit={handleSearch} className="mb-6">
@@ -193,5 +198,6 @@ export default function BrowsePage() {
     </div>
   );
 }
+
 
 

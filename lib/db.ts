@@ -59,6 +59,17 @@ export function indexFiles(knowledgebasePath: string = './android') {
   const db = getDb();
   const knowledgebase = knowledgebasePath.split('/').pop() || 'android';
   
+  // Normalize level names (e.g., "beginners" -> "beginner")
+  function normalizeLevel(level?: string): string {
+    if (!level) return 'beginner';
+    const normalized = level.toLowerCase();
+    if (normalized === 'beginners' || normalized === 'fundamentals') return 'beginner';
+    if (normalized === 'intermediates') return 'intermediate';
+    if (normalized === 'advanceds') return 'advanced';
+    if (normalized === 'overachievers') return 'overachiever';
+    return normalized;
+  }
+
   function scanDirectory(dir: string, level?: string): void {
     const entries = readdirSync(dir, { withFileTypes: true });
     
@@ -66,7 +77,8 @@ export function indexFiles(knowledgebasePath: string = './android') {
       const fullPath = join(dir, entry.name);
       
       if (entry.isDirectory()) {
-        const newLevel = entry.name.match(/^\d+_(.+)$/)?.[1] || level;
+        const extractedLevel = entry.name.match(/^\d+_(.+)$/)?.[1];
+        const newLevel = extractedLevel ? normalizeLevel(extractedLevel) : level;
         scanDirectory(fullPath, newLevel);
       } else if (entry.isFile() && entry.name.endsWith('.md')) {
         try {
@@ -77,7 +89,7 @@ export function indexFiles(knowledgebasePath: string = './android') {
             canonical_id: data.canonical_id || `unknown-${Date.now()}`,
             slug: data.slug || entry.name.replace('.md', ''),
             title: data.title || entry.name,
-            level: data.level || level || 'beginner',
+            level: normalizeLevel(data.level || level) as 'beginner' | 'intermediate' | 'advanced' | 'overachiever',
             number: data.number || 0,
             file_path: fullPath,
             knowledgebase,
@@ -147,6 +159,7 @@ export function getFiles(filters?: {
   level?: string;
   knowledgebase?: string;
   tags?: string[];
+  topic?: string;
 }): KnowledgeFile[] {
   const db = getDb();
   let query = 'SELECT * FROM knowledge_files WHERE 1=1';
@@ -160,6 +173,12 @@ export function getFiles(filters?: {
   if (filters?.knowledgebase) {
     query += ' AND knowledgebase = ?';
     params.push(filters.knowledgebase);
+  }
+  
+  if (filters?.topic) {
+    // Filter by topic: file_path should contain /topic/ (e.g., /databases/)
+    query += ' AND file_path LIKE ?';
+    params.push(`%/${filters.topic}/%`);
   }
   
   if (filters?.tags && filters.tags.length > 0) {
@@ -195,6 +214,7 @@ export function getFileById(id: number): KnowledgeFile | null {
 export function searchFiles(query: string, filters?: {
   level?: string;
   knowledgebase?: string;
+  topic?: string;
 }): KnowledgeFile[] {
   const db = getDb();
   
@@ -213,6 +233,11 @@ export function searchFiles(query: string, filters?: {
   if (filters?.knowledgebase) {
     ftsQuery += ' AND kf.knowledgebase = ?';
     params.push(filters.knowledgebase);
+  }
+  
+  if (filters?.topic) {
+    ftsQuery += ' AND kf.file_path LIKE ?';
+    params.push(`%/${filters.topic}/%`);
   }
   
   ftsQuery += ' ORDER BY kf.number ASC';
