@@ -42,3 +42,27 @@ export interface DuplicateCheck {
   similarFiles: Array<{ file: KnowledgeFile; similarity: number }>;
 }
 
+export interface RoadmapNode {
+  id: string;
+  title: string;
+  slug: string;
+  level: 'beginner' | 'intermediate' | 'advanced' | 'overachiever';
+  knowledgebase: string;
+  x?: number;
+  y?: number;
+  prerequisites?: string[];
+}
+
+export interface RoadmapEdge {
+  id: string;
+  source: string;
+  target: string;
+}
+
+export interface Roadmap {
+  knowledgebase: string;
+  topic?: string;
+  nodes: RoadmapNode[];
+  edges: RoadmapEdge[];
+}
+

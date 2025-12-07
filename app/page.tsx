@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { KnowledgeBaseMetadata } from '@/types';
+import Roadmap from '@/components/Roadmap';
 
 interface Topic {
   name: string;
@@ -10,34 +11,49 @@ interface Topic {
   levelCount: number;
 }
 
+import { Roadmap as RoadmapType } from '@/types';
+
 export default function Home() {
   const [knowledgebases, setKnowledgebases] = useState<KnowledgeBaseMetadata[]>([]);
   const [computerScienceTopics, setComputerScienceTopics] = useState<Topic[]>([]);
+  const [androidRoadmap, setAndroidRoadmap] = useState<RoadmapType | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch knowledge bases
-    fetch('/api/index')
-      .then(res => res.json())
-      .then(data => {
-        setKnowledgebases(data.knowledgebases || []);
+    const fetchData = async () => {
+      try {
+        // Fetch knowledge bases
+        const kbRes = await fetch('/api/index');
+        const kbData = await kbRes.json();
+        setKnowledgebases(kbData.knowledgebases || []);
+        
+        // Fetch Android roadmap
+        const androidKb = kbData.knowledgebases?.find((kb: KnowledgeBaseMetadata) => kb.name === 'android');
+        if (androidKb) {
+          try {
+            const roadmapRes = await fetch('/api/roadmap?knowledgebase=android');
+            const roadmapData = await roadmapRes.json();
+            setAndroidRoadmap(roadmapData.roadmap);
+          } catch (err) {
+            console.error('Error fetching roadmap:', err);
+          }
+        }
         
         // Fetch topics for computer_science
-        const csKb = data.knowledgebases?.find((kb: KnowledgeBaseMetadata) => kb.name === 'computer_science');
+        const csKb = kbData.knowledgebases?.find((kb: KnowledgeBaseMetadata) => kb.name === 'computer_science');
         if (csKb) {
-          return fetch('/api/topics?knowledgebase=computer_science');
+          const topicsRes = await fetch('/api/topics?knowledgebase=computer_science');
+          const topicsData = await topicsRes.json();
+          setComputerScienceTopics(topicsData.topics || []);
         }
-        return Promise.resolve({ json: () => Promise.resolve({ topics: [] }) });
-      })
-      .then(res => res.json())
-      .then(data => {
-        setComputerScienceTopics(data.topics || []);
-        setLoading(false);
-      })
-      .catch(err => {
+      } catch (err) {
         console.error('Error fetching data:', err);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    fetchData();
   }, []);
 
   if (loading) {
@@ -116,7 +132,7 @@ export default function Home() {
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow-md p-8">
+      <div className="bg-white rounded-lg shadow-md p-8 mb-8">
         <h2 className="text-2xl font-semibold text-gray-900 mb-4">
           Learning Paths
         </h2>
@@ -157,6 +173,39 @@ export default function Home() {
               Push the boundaries of engineering excellence
             </p>
           </Link>
+        </div>
+      </div>
+
+      {/* Roadmaps */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+          Roadmaps
+        </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {androidRoadmap && (
+            <div>
+              <Roadmap roadmap={androidRoadmap} compact={true} />
+            </div>
+          )}
+          {computerScienceTopics.slice(0, 3).map((topic) => (
+            <Link
+              key={topic.name}
+              href={`/roadmap?knowledgebase=computer_science&topic=${topic.name}`}
+              className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
+            >
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                {topic.name.split('_').map(word => 
+                  word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' ')} Roadmap
+              </h3>
+              <p className="text-gray-600 mb-4">
+                {topic.fileCount} topics across {topic.levelCount} levels
+              </p>
+              <div className="text-sm text-blue-600 font-medium">
+                View Roadmap →
+              </div>
+            </Link>
+          ))}
         </div>
       </div>
 
