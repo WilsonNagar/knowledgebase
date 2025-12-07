@@ -67,6 +67,18 @@ export default function BrowsePage() {
     }
   };
 
+  const buildBrowseUrl = (levelParam?: string | null) => {
+    const params = new URLSearchParams();
+    if (levelParam) {
+      params.set('level', levelParam);
+    }
+    params.set('knowledgebase', knowledgebase);
+    if (topic) {
+      params.set('topic', topic);
+    }
+    return `/browse?${params.toString()}`;
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
@@ -109,7 +121,7 @@ export default function BrowsePage() {
 
         <div className="flex gap-2 flex-wrap mb-4">
           <Link
-            href="/browse"
+            href={buildBrowseUrl(null)}
             className={`px-4 py-2 rounded-lg ${
               !level ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
@@ -117,7 +129,7 @@ export default function BrowsePage() {
             All Levels
           </Link>
           <Link
-            href="/browse?level=beginner"
+            href={buildBrowseUrl('beginner')}
             className={`px-4 py-2 rounded-lg ${
               level === 'beginner' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
@@ -125,7 +137,7 @@ export default function BrowsePage() {
             Beginner
           </Link>
           <Link
-            href="/browse?level=intermediate"
+            href={buildBrowseUrl('intermediate')}
             className={`px-4 py-2 rounded-lg ${
               level === 'intermediate' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
@@ -133,7 +145,7 @@ export default function BrowsePage() {
             Intermediate
           </Link>
           <Link
-            href="/browse?level=advanced"
+            href={buildBrowseUrl('advanced')}
             className={`px-4 py-2 rounded-lg ${
               level === 'advanced' ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
@@ -141,7 +153,7 @@ export default function BrowsePage() {
             Advanced
           </Link>
           <Link
-            href="/browse?level=overachiever"
+            href={buildBrowseUrl('overachiever')}
             className={`px-4 py-2 rounded-lg ${
               level === 'overachiever' ? 'bg-orange-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
