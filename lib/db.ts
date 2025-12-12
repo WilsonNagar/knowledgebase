@@ -267,6 +267,180 @@ export function searchFiles(query: string, filters?: {
   return db.prepare(ftsQuery).all(...params) as KnowledgeFile[];
 }
 
+export function indexProjects(projectsPath: string = './projects') {
+  const db = getDb();
+  const { readFileSync, readdirSync } = require('fs');
+  const { join } = require('path');
+  const matter = require('gray-matter');
+  
+  function normalizeLevel(level?: string): string {
+    if (!level) return 'beginner';
+    const normalized = level.toLowerCase();
+    if (normalized === 'beginners' || normalized === 'fundamentals') return 'beginner';
+    if (normalized === 'intermediates') return 'intermediate';
+    if (normalized === 'advanceds') return 'advanced';
+    if (normalized === 'overachievers') return 'overachiever';
+    return normalized;
+  }
+  
+  function extractSteps(content: string): any[] {
+    const steps: any[] = [];
+    const challengeSections = content.split(/^## Challenge \d+:/gm);
+    
+    challengeSections.forEach((section, index) => {
+      if (index === 0) return;
+      
+      const challengeMatch = section.match(/^(.+?) \((.+?)\)$/m);
+      if (!challengeMatch) return;
+      
+      const title = challengeMatch[1].trim();
+      const difficulty = challengeMatch[2].trim().toLowerCase();
+      
+      // Extract step descriptions
+      const stepMatches = [...section.matchAll(/^### Step \d+\.\d+: (.+)$/gm)];
+      const stepsInChallenge = stepMatches.map((m, i) => {
+        const stepIndex = m.index || 0;
+        const afterStep = section.substring(stepIndex);
+        const nextStepMatch = afterStep.match(/\n### Step \d+\.\d+:/);
+        const endIndex = nextStepMatch ? nextStepMatch.index : afterStep.length;
+        let description = afterStep.substring(0, endIndex);
+        description = description.replace(/```[\s\S]*?```/g, '');
+        description = description.replace(/### Hints[\s\S]*?###/g, '');
+        description = description.replace(/### Guide References[\s\S]*?###/g, '');
+        const lines = description.split('\n').filter(l => l.trim() && !l.startsWith('#'));
+        
+        // Extract guide references
+        const refMatch = section.match(/### Guide References[\s\S]*?###/);
+        const guideRefs: string[] = [];
+        if (refMatch) {
+          const refSection = refMatch[0];
+          const linkMatches = [...refSection.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)];
+          linkMatches.forEach(linkMatch => {
+            const slug = linkMatch[2].match(/\/([^/]+)\.md/)?.[1];
+            if (slug) guideRefs.push(slug);
+          });
+        }
+        
+        // Extract hints
+        const hintsMatch = section.match(/### Hints[\s\S]*?(?=###|$)/);
+        const hints: string[] = [];
+        if (hintsMatch) {
+          const hintsSection = hintsMatch[0];
+          const listMatches = [...hintsSection.matchAll(/^[-*] (.+)$/gm)];
+          listMatches.forEach(hintMatch => {
+            hints.push(hintMatch[1].trim());
+          });
+        }
+        
+        // Extract code examples
+        const codeMatches = [...section.matchAll(/```[\s\S]*?```/g)];
+        const codeExamples = codeMatches.map(c => c[0]).join('\n\n');
+        
+        return {
+          number: index * 100 + (i + 1),
+          title: m[1].trim(),
+          description: lines.slice(0, 3).join(' ').substring(0, 500),
+          guide_references: guideRefs,
+          code_examples: codeExamples || undefined,
+          hints: hints.length > 0 ? hints : undefined,
+        };
+      });
+      
+      steps.push({
+        challenge_number: index,
+        challenge_title: title,
+        difficulty: difficulty,
+        steps: stepsInChallenge,
+        completion_status: 'not_started',
+      });
+    });
+    
+    return steps;
+  }
+  
+  function extractRequirements(content: string): string {
+    const reqMatch = content.match(/### Project Requirements[\s\S]*?(?=##|$)/);
+    return reqMatch ? reqMatch[0] : content.substring(0, 1000);
+  }
+  
+  function scanDirectory(dir: string, level?: string): void {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      
+      if (entry.isDirectory()) {
+        const extractedLevel = entry.name.match(/^\d+_(.+)$/)?.[1];
+        const newLevel = extractedLevel ? normalizeLevel(extractedLevel) : level;
+        scanDirectory(fullPath, newLevel);
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        try {
+          const content = readFileSync(fullPath, 'utf-8');
+          const { data, content: body } = matter(content);
+          
+          const steps = extractSteps(body);
+          const requirements = extractRequirements(body);
+          const topic = fullPath.split('/').slice(-3, -2)[0] || data.topic || 'android';
+          
+          const project = {
+            canonical_id: data.canonical_id || `project-${Date.now()}-${Math.random()}`,
+            slug: data.slug || entry.name.replace('.md', ''),
+            title: data.title || entry.name,
+            description: data.description || '',
+            level: normalizeLevel(data.level || level) as 'beginner' | 'intermediate' | 'advanced' | 'overachiever',
+            topic: topic,
+            requirements: requirements,
+            topics_covered: Array.isArray(data.topics_covered) 
+              ? data.topics_covered.join(',') 
+              : (data.topics_covered || ''),
+            estimated_hours: data.estimated_hours || 0,
+            steps: JSON.stringify(steps),
+            prerequisites: data.prerequisites 
+              ? JSON.stringify(Array.isArray(data.prerequisites) ? data.prerequisites : [data.prerequisites])
+              : null,
+          };
+          
+          db.prepare(`
+            INSERT INTO projects (
+              canonical_id, slug, title, description, level, topic,
+              requirements, topics_covered, estimated_hours, steps, prerequisites
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(canonical_id) DO UPDATE SET
+              slug = excluded.slug,
+              title = excluded.title,
+              description = excluded.description,
+              level = excluded.level,
+              topic = excluded.topic,
+              requirements = excluded.requirements,
+              topics_covered = excluded.topics_covered,
+              estimated_hours = excluded.estimated_hours,
+              steps = excluded.steps,
+              prerequisites = excluded.prerequisites,
+              updated_at = CURRENT_TIMESTAMP
+          `).run(
+            project.canonical_id,
+            project.slug,
+            project.title,
+            project.description,
+            project.level,
+            project.topic,
+            project.requirements,
+            project.topics_covered,
+            project.estimated_hours,
+            project.steps,
+            project.prerequisites
+          );
+          
+        } catch (error) {
+          console.error(`Error indexing ${fullPath}:`, error);
+        }
+      }
+    }
+  }
+  
+  scanDirectory(projectsPath);
+}
+
 export function getKnowledgeBases(): KnowledgeBaseMetadata[] {
   const db = getDb();
   const bases = db.prepare(`
