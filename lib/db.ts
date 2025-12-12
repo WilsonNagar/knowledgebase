@@ -52,6 +52,28 @@ function initializeDb() {
       tags,
       content_rowid=id
     );
+    
+    CREATE TABLE IF NOT EXISTS projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      canonical_id TEXT UNIQUE NOT NULL,
+      slug TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      level TEXT NOT NULL,
+      topic TEXT NOT NULL,
+      requirements TEXT NOT NULL,
+      topics_covered TEXT,
+      estimated_hours INTEGER,
+      steps TEXT NOT NULL,
+      prerequisites TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_project_canonical_id ON projects(canonical_id);
+    CREATE INDEX IF NOT EXISTS idx_project_slug ON projects(slug);
+    CREATE INDEX IF NOT EXISTS idx_project_level ON projects(level);
+    CREATE INDEX IF NOT EXISTS idx_project_topic ON projects(topic);
   `);
 }
 

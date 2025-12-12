@@ -66,3 +66,29 @@ export interface Roadmap {
   edges: RoadmapEdge[];
 }
 
+export interface ProjectStep {
+  number: number;
+  title: string;
+  description: string;
+  guide_references?: string[]; // Array of guide slugs or canonical_ids
+  code_examples?: string;
+  hints?: string[];
+}
+
+export interface Project {
+  id?: number;
+  canonical_id: string;
+  slug: string;
+  title: string;
+  description: string;
+  level: 'beginner' | 'intermediate' | 'advanced' | 'overachiever';
+  topic: string; // android, devops, backend, etc.
+  requirements: string; // Markdown content
+  topics_covered: string; // Comma-separated tags
+  estimated_hours: number;
+  steps: ProjectStep[];
+  prerequisites?: string[]; // Array of guide canonical_ids
+  created_at?: string;
+  updated_at?: string;
+}
+
