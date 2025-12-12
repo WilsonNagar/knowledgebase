@@ -5,13 +5,13 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const level = searchParams.get('level');
-    const knowledgebase = searchParams.get('knowledgebase') || 'android';
+    const knowledgebase = searchParams.get('knowledgebase');
     const topic = searchParams.get('topic');
     const tags = searchParams.get('tags')?.split(',');
     
     const files = getFiles({
       level: level || undefined,
-      knowledgebase,
+      knowledgebase: knowledgebase || undefined,
       topic: topic || undefined,
       tags: tags || undefined,
     });

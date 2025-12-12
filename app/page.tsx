@@ -17,6 +17,7 @@ export default function Home() {
   const [knowledgebases, setKnowledgebases] = useState<KnowledgeBaseMetadata[]>([]);
   const [computerScienceTopics, setComputerScienceTopics] = useState<Topic[]>([]);
   const [androidRoadmap, setAndroidRoadmap] = useState<RoadmapType | null>(null);
+  const [devopsRoadmap, setDevopsRoadmap] = useState<RoadmapType | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,7 +36,19 @@ export default function Home() {
             const roadmapData = await roadmapRes.json();
             setAndroidRoadmap(roadmapData.roadmap);
           } catch (err) {
-            console.error('Error fetching roadmap:', err);
+            console.error('Error fetching Android roadmap:', err);
+          }
+        }
+        
+        // Fetch DevOps roadmap
+        const devopsKb = kbData.knowledgebases?.find((kb: KnowledgeBaseMetadata) => kb.name === 'devops');
+        if (devopsKb) {
+          try {
+            const roadmapRes = await fetch('/api/roadmap?knowledgebase=devops');
+            const roadmapData = await roadmapRes.json();
+            setDevopsRoadmap(roadmapData.roadmap);
+          } catch (err) {
+            console.error('Error fetching DevOps roadmap:', err);
           }
         }
         
@@ -71,18 +84,18 @@ export default function Home() {
           Knowledge Base
         </h1>
         <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-          A comprehensive, multi-level knowledge base covering Android development and Computer Science.
+          A comprehensive, multi-level knowledge base covering Android development, DevOps, and Computer Science.
           Learn from beginner concepts to advanced architecture patterns.
         </p>
       </div>
 
-      {/* Android Knowledge Base */}
-      {knowledgebases.filter(kb => kb.name === 'android').length > 0 && (
+      {/* Main Knowledge Bases */}
+      {knowledgebases.filter(kb => ['android', 'devops'].includes(kb.name)).length > 0 && (
         <div className="mb-8">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Android Development</h2>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Main Knowledge Bases</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {knowledgebases
-              .filter(kb => kb.name === 'android')
+              .filter(kb => ['android', 'devops'].includes(kb.name))
               .map((kb) => (
                 <Link
                   key={kb.name}
@@ -90,7 +103,9 @@ export default function Home() {
                   className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
                 >
                   <h3 className="text-2xl font-semibold text-gray-900 mb-2">
-                    {kb.name.charAt(0).toUpperCase() + kb.name.slice(1)}
+                    {kb.name === 'android' ? 'Android Development' : 
+                     kb.name === 'devops' ? 'DevOps' :
+                     kb.name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                   </h3>
                   <p className="text-gray-600 mb-4">
                     {kb.fileCount} files across {kb.levelCount} levels
@@ -187,7 +202,12 @@ export default function Home() {
               <Roadmap roadmap={androidRoadmap} compact={true} />
             </div>
           )}
-          {computerScienceTopics.slice(0, 3).map((topic) => (
+          {devopsRoadmap && (
+            <div>
+              <Roadmap roadmap={devopsRoadmap} compact={true} />
+            </div>
+          )}
+          {computerScienceTopics.slice(0, 2).map((topic) => (
             <Link
               key={topic.name}
               href={`/roadmap?knowledgebase=computer_science&topic=${topic.name}`}

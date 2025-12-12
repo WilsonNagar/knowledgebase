@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Wilson Knowledge Base',
-  description: 'Comprehensive knowledge base covering Android development and Computer Science',
+  description: 'Comprehensive knowledge base covering Android development, DevOps, and Computer Science',
 };
 
 export default function RootLayout({

@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
     // Map knowledgebase names to paths
     const knowledgebasePaths: Record<string, string> = {
       'android': './android',
+      'devops': './devops',
       'computer_science': './computer_science',
       'computer-science': './computer_science',
     };

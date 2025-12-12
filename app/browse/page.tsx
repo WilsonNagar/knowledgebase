@@ -1,39 +1,47 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { KnowledgeFile } from '@/types';
+import { KnowledgeFile, KnowledgeBaseMetadata } from '@/types';
 
 export default function BrowsePage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const level = searchParams.get('level');
-  const knowledgebase = searchParams.get('knowledgebase') || 'android';
+  const knowledgebase = searchParams.get('knowledgebase') || '';
   const topic = searchParams.get('topic');
   const [files, setFiles] = useState<KnowledgeFile[]>([]);
+  const [knowledgebases, setKnowledgebases] = useState<KnowledgeBaseMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    const fetchFiles = async () => {
+    const fetchData = async () => {
       setLoading(true);
       try {
+        // Fetch knowledge bases
+        const kbRes = await fetch('/api/index');
+        const kbData = await kbRes.json();
+        setKnowledgebases(kbData.knowledgebases || []);
+        
+        // Fetch files
         const params = new URLSearchParams();
         if (level) params.set('level', level);
-        params.set('knowledgebase', knowledgebase);
+        if (knowledgebase) params.set('knowledgebase', knowledgebase);
         if (topic) params.set('topic', topic);
         
         const res = await fetch(`/api/files?${params.toString()}`);
         const data = await res.json();
         setFiles(data.files || []);
       } catch (error) {
-        console.error('Error fetching files:', error);
+        console.error('Error fetching data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchFiles();
+    fetchData();
   }, [level, knowledgebase, topic]);
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -45,7 +53,7 @@ export default function BrowsePage() {
       const params = new URLSearchParams();
       params.set('q', searchQuery);
       if (level) params.set('level', level);
-      params.set('knowledgebase', knowledgebase);
+      if (knowledgebase) params.set('knowledgebase', knowledgebase);
       
       const res = await fetch(`/api/search?${params.toString()}`);
       const data = await res.json();
@@ -67,16 +75,27 @@ export default function BrowsePage() {
     }
   };
 
-  const buildBrowseUrl = (levelParam?: string | null) => {
+  const buildBrowseUrl = (levelParam?: string | null, kbParam?: string | null) => {
     const params = new URLSearchParams();
     if (levelParam) {
       params.set('level', levelParam);
     }
-    params.set('knowledgebase', knowledgebase);
+    const kb = kbParam !== undefined ? kbParam : knowledgebase;
+    if (kb) {
+      params.set('knowledgebase', kb);
+    }
     if (topic) {
       params.set('topic', topic);
     }
     return `/browse?${params.toString()}`;
+  };
+
+  const handleKnowledgeBaseChange = (kb: string) => {
+    const params = new URLSearchParams();
+    if (level) params.set('level', level);
+    if (kb) params.set('knowledgebase', kb);
+    if (topic) params.set('topic', topic);
+    router.push(`/browse?${params.toString()}`);
   };
 
   return (
@@ -89,6 +108,42 @@ export default function BrowsePage() {
           }
         </h1>
         
+        {/* Knowledge Base Selector */}
+        {!topic && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Knowledge Base
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => handleKnowledgeBaseChange('')}
+                className={`px-4 py-2 rounded-lg ${
+                  !knowledgebase 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                All
+              </button>
+              {knowledgebases.map((kb) => (
+                <button
+                  key={kb.name}
+                  onClick={() => handleKnowledgeBaseChange(kb.name)}
+                  className={`px-4 py-2 rounded-lg ${
+                    knowledgebase === kb.name
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  {kb.name === 'android' ? 'Android' :
+                   kb.name === 'devops' ? 'DevOps' :
+                   kb.name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSearch} className="mb-6">
           <div className="flex gap-2">
             <input
@@ -174,7 +229,7 @@ export default function BrowsePage() {
           {files.map((file) => (
             <Link
               key={file.canonical_id}
-              href={`/read/${file.slug}?knowledgebase=${knowledgebase}`}
+              href={`/read/${file.slug}?knowledgebase=${file.knowledgebase || knowledgebase}`}
               className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
             >
               <div className="flex items-start justify-between mb-2">
