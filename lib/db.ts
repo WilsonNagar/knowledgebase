@@ -296,12 +296,12 @@ export function indexProjects(projectsPath: string = './projects') {
       const title = challengeMatch[1].trim();
       const difficulty = challengeMatch[2].trim().toLowerCase();
       
-      // Extract step descriptions
-      const stepMatches = [...section.matchAll(/^### Step \d+\.\d+: (.+)$/gm)];
+      // Extract step descriptions - handle both ### and #### formats
+      const stepMatches = [...section.matchAll(/^#### Step \d+\.\d+: (.+)$/gm)];
       const stepsInChallenge = stepMatches.map((m, i) => {
         const stepIndex = m.index || 0;
         const afterStep = section.substring(stepIndex);
-        const nextStepMatch = afterStep.match(/\n### Step \d+\.\d+:/);
+        const nextStepMatch = afterStep.match(/\n#### Step \d+\.\d+:/);
         const endIndex = nextStepMatch ? nextStepMatch.index : afterStep.length;
         let description = afterStep.substring(0, endIndex);
         description = description.replace(/```[\s\S]*?```/g, '');
@@ -309,20 +309,100 @@ export function indexProjects(projectsPath: string = './projects') {
         description = description.replace(/### Guide References[\s\S]*?###/g, '');
         const lines = description.split('\n').filter(l => l.trim() && !l.startsWith('#'));
         
-        // Extract guide references
-        const refMatch = section.match(/### Guide References[\s\S]*?###/);
+        // Extract guide references - look in the step section, not the whole challenge
+        const stepSection = afterStep.substring(0, endIndex);
+        const refMatch = stepSection.match(/### Guide References[\s\S]*?(?=###|$)/);
         const guideRefs: string[] = [];
         if (refMatch) {
           const refSection = refMatch[0];
           const linkMatches = [...refSection.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)];
           linkMatches.forEach(linkMatch => {
-            const slug = linkMatch[2].match(/\/([^/]+)\.md/)?.[1];
-            if (slug) guideRefs.push(slug);
+            const path = linkMatch[2];
+            // Handle relative paths like ../android/02_intermediate/14.%20Android%20Services%20-%20Complete%20Guide.md
+            // Extract filename from path
+            const filenameMatch = path.match(/([^/]+)\.md$/);
+            if (filenameMatch) {
+              // Decode URL encoding (%20 -> space, etc.)
+              let filename = decodeURIComponent(filenameMatch[1]);
+              // Remove .md extension if present
+              filename = filename.replace(/\.md$/, '');
+              
+              // Try to resolve to actual canonical_id or slug by reading the file
+              // Extract knowledgebase and path from relative path
+              const pathParts = path.split('/');
+              const androidIndex = pathParts.findIndex(p => p === 'android' || p === 'devops' || p === 'backend');
+              if (androidIndex !== -1 && pathParts.length > androidIndex + 2) {
+                const knowledgebase = pathParts[androidIndex];
+                const levelFolder = pathParts[androidIndex + 1];
+                // Construct file path relative to project root
+                const projectRoot = knowledgebasePath.replace(/\/projects.*$/, '');
+                const filePath = join(projectRoot, knowledgebase, levelFolder, filename + '.md');
+                
+                try {
+                  const fs = require('fs');
+                  if (fs.existsSync(filePath)) {
+                    const fileContent = readFileSync(filePath, 'utf-8');
+                    const { data } = matter(fileContent);
+                    // Use canonical_id if available (preferred), otherwise use slug
+                    if (data.canonical_id) {
+                      guideRefs.push(data.canonical_id);
+                    } else if (data.slug) {
+                      guideRefs.push(data.slug);
+                    } else {
+                      // Fallback to filename
+                      guideRefs.push(filename);
+                    }
+                  } else {
+                    // File not found, try to look up in database by filename pattern
+                    const db = getDb();
+                    const fileQuery = db.prepare(`
+                      SELECT canonical_id, slug FROM knowledge_files 
+                      WHERE knowledgebase = ? AND file_path LIKE ?
+                      LIMIT 1
+                    `);
+                    const result = fileQuery.get(knowledgebase, `%/${filename}.md`) as { canonical_id?: string; slug?: string } | undefined;
+                    if (result) {
+                      guideRefs.push(result.canonical_id || result.slug || filename);
+                    } else {
+                      guideRefs.push(filename);
+                    }
+                  }
+                } catch (error) {
+                  // Error reading file, try database lookup
+                  try {
+                    const db = getDb();
+                    const fileQuery = db.prepare(`
+                      SELECT canonical_id, slug FROM knowledge_files 
+                      WHERE knowledgebase = ? AND file_path LIKE ?
+                      LIMIT 1
+                    `);
+                    const result = fileQuery.get(knowledgebase, `%/${filename}.md`) as { canonical_id?: string; slug?: string } | undefined;
+                    if (result) {
+                      guideRefs.push(result.canonical_id || result.slug || filename);
+                    } else {
+                      guideRefs.push(filename);
+                    }
+                  } catch (dbError) {
+                    // Final fallback to filename
+                    guideRefs.push(filename);
+                  }
+                }
+              } else {
+                // Can't parse path, use filename
+                guideRefs.push(filename);
+              }
+            } else {
+              // Fallback: try to extract any slug-like string
+              const slugMatch = path.match(/([^/]+)\.md/);
+              if (slugMatch) {
+                guideRefs.push(decodeURIComponent(slugMatch[1]));
+              }
+            }
           });
         }
         
-        // Extract hints
-        const hintsMatch = section.match(/### Hints[\s\S]*?(?=###|$)/);
+        // Extract hints - look in the step section
+        const hintsMatch = stepSection.match(/### Hints[\s\S]*?(?=###|$)/);
         const hints: string[] = [];
         if (hintsMatch) {
           const hintsSection = hintsMatch[0];
@@ -332,9 +412,9 @@ export function indexProjects(projectsPath: string = './projects') {
           });
         }
         
-        // Extract code examples
-        const codeMatches = [...section.matchAll(/```[\s\S]*?```/g)];
-        const codeExamples = codeMatches.map(c => c[0]).join('\n\n');
+        // Extract code examples - look in the step section
+        const codeMatches = [...stepSection.matchAll(/```[\s\S]*?```/g)];
+        const codeExamples = codeMatches.length > 0 ? codeMatches.map(c => c[0]).join('\n\n') : undefined;
         
         return {
           number: index * 100 + (i + 1),
