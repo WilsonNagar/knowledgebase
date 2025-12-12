@@ -40,6 +40,18 @@ try {
   indexFiles('./android');
   console.log('✅ Android indexed\n');
   
+  console.log('Indexing DevOps...');
+  indexFiles('./devops');
+  console.log('✅ DevOps indexed\n');
+  
+  console.log('Indexing Backend...');
+  indexFiles('./backend');
+  console.log('✅ Backend indexed\n');
+  
+  console.log('Indexing Golang...');
+  indexFiles('./golang');
+  console.log('✅ Golang indexed\n');
+  
   console.log('Indexing Computer Science...');
   indexFiles('./computer_science');
   console.log('✅ Computer Science indexed\n');
@@ -48,6 +60,8 @@ try {
 } catch (error) {
   console.error('❌ Error indexing:', error.message);
   console.log('\n💡 Alternative: Use the API endpoint when dev server is running');
+  console.log('   curl -X POST http://localhost:3000/api/index -H "Content-Type: application/json" -d \'{"knowledgebase":"backend"}\'');
+  console.log('   curl -X POST http://localhost:3000/api/index -H "Content-Type: application/json" -d \'{"knowledgebase":"golang"}\'');
   process.exit(1);
 }
 

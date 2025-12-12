@@ -18,6 +18,8 @@ export default function Home() {
   const [computerScienceTopics, setComputerScienceTopics] = useState<Topic[]>([]);
   const [androidRoadmap, setAndroidRoadmap] = useState<RoadmapType | null>(null);
   const [devopsRoadmap, setDevopsRoadmap] = useState<RoadmapType | null>(null);
+  const [backendRoadmap, setBackendRoadmap] = useState<RoadmapType | null>(null);
+  const [golangRoadmap, setGolangRoadmap] = useState<RoadmapType | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -49,6 +51,30 @@ export default function Home() {
             setDevopsRoadmap(roadmapData.roadmap);
           } catch (err) {
             console.error('Error fetching DevOps roadmap:', err);
+          }
+        }
+        
+        // Fetch Backend roadmap
+        const backendKb = kbData.knowledgebases?.find((kb: KnowledgeBaseMetadata) => kb.name === 'backend');
+        if (backendKb) {
+          try {
+            const roadmapRes = await fetch('/api/roadmap?knowledgebase=backend');
+            const roadmapData = await roadmapRes.json();
+            setBackendRoadmap(roadmapData.roadmap);
+          } catch (err) {
+            console.error('Error fetching Backend roadmap:', err);
+          }
+        }
+        
+        // Fetch Golang roadmap
+        const golangKb = kbData.knowledgebases?.find((kb: KnowledgeBaseMetadata) => kb.name === 'golang');
+        if (golangKb) {
+          try {
+            const roadmapRes = await fetch('/api/roadmap?knowledgebase=golang');
+            const roadmapData = await roadmapRes.json();
+            setGolangRoadmap(roadmapData.roadmap);
+          } catch (err) {
+            console.error('Error fetching Golang roadmap:', err);
           }
         }
         
@@ -84,18 +110,18 @@ export default function Home() {
           Knowledge Base
         </h1>
         <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-          A comprehensive, multi-level knowledge base covering Android development, DevOps, and Computer Science.
+          A comprehensive, multi-level knowledge base covering Android development, Backend development, Go programming, DevOps, and Computer Science.
           Learn from beginner concepts to advanced architecture patterns.
         </p>
       </div>
 
       {/* Main Knowledge Bases */}
-      {knowledgebases.filter(kb => ['android', 'devops'].includes(kb.name)).length > 0 && (
+      {knowledgebases.filter(kb => ['android', 'devops', 'backend', 'golang'].includes(kb.name)).length > 0 && (
         <div className="mb-8">
           <h2 className="text-2xl font-semibold text-gray-900 mb-4">Main Knowledge Bases</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {knowledgebases
-              .filter(kb => ['android', 'devops'].includes(kb.name))
+              .filter(kb => ['android', 'devops', 'backend', 'golang'].includes(kb.name))
               .map((kb) => (
                 <Link
                   key={kb.name}
@@ -105,6 +131,8 @@ export default function Home() {
                   <h3 className="text-2xl font-semibold text-gray-900 mb-2">
                     {kb.name === 'android' ? 'Android Development' : 
                      kb.name === 'devops' ? 'DevOps' :
+                     kb.name === 'backend' ? 'Backend Development' :
+                     kb.name === 'golang' ? 'Go Programming' :
                      kb.name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                   </h3>
                   <p className="text-gray-600 mb-4">
@@ -205,6 +233,16 @@ export default function Home() {
           {devopsRoadmap && (
             <div>
               <Roadmap roadmap={devopsRoadmap} compact={true} />
+            </div>
+          )}
+          {backendRoadmap && (
+            <div>
+              <Roadmap roadmap={backendRoadmap} compact={true} />
+            </div>
+          )}
+          {golangRoadmap && (
+            <div>
+              <Roadmap roadmap={golangRoadmap} compact={true} />
             </div>
           )}
           {computerScienceTopics.slice(0, 2).map((topic) => (

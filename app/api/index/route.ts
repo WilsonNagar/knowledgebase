@@ -23,6 +23,8 @@ export async function POST(request: NextRequest) {
     const knowledgebasePaths: Record<string, string> = {
       'android': './android',
       'devops': './devops',
+      'backend': './backend',
+      'golang': './golang',
       'computer_science': './computer_science',
       'computer-science': './computer_science',
     };

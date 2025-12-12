@@ -137,6 +137,8 @@ export default function BrowsePage() {
                 >
                   {kb.name === 'android' ? 'Android' :
                    kb.name === 'devops' ? 'DevOps' :
+                   kb.name === 'backend' ? 'Backend' :
+                   kb.name === 'golang' ? 'Go' :
                    kb.name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                 </button>
               ))}
