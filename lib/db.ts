@@ -264,6 +264,64 @@ export async function getFileById(id: number): Promise<KnowledgeFile | null> {
   return result.rows[0] as KnowledgeFile | null || null;
 }
 
+export async function getFileByFilename(filename: string, knowledgebase?: string): Promise<{ slug: string; knowledgebase: string } | null> {
+  const pool = getPool();
+  
+  // Remove .md extension if present
+  const cleanFilename = filename.replace(/\.md$/, '');
+  // Decode URL encoding
+  const decodedFilename = decodeURIComponent(cleanFilename);
+  
+  let query = `
+    SELECT slug, knowledgebase 
+    FROM knowledge_files 
+    WHERE file_path LIKE $1
+    LIMIT 1
+  `;
+  const params: any[] = [`%/${decodedFilename}.md`];
+  
+  if (knowledgebase) {
+    query = `
+      SELECT slug, knowledgebase 
+      FROM knowledge_files 
+      WHERE file_path LIKE $1 AND knowledgebase = $2
+      LIMIT 1
+    `;
+    params.push(knowledgebase);
+  }
+  
+  const result = await pool.query(query, params);
+  if (result.rows.length > 0) {
+    return result.rows[0] as { slug: string; knowledgebase: string };
+  }
+  
+  // Try matching by title if filename doesn't match
+  let titleQuery = `
+    SELECT slug, knowledgebase 
+    FROM knowledge_files 
+    WHERE title = $1
+    LIMIT 1
+  `;
+  const titleParams: any[] = [decodedFilename];
+  
+  if (knowledgebase) {
+    titleQuery = `
+      SELECT slug, knowledgebase 
+      FROM knowledge_files 
+      WHERE title = $1 AND knowledgebase = $2
+      LIMIT 1
+    `;
+    titleParams.push(knowledgebase);
+  }
+  
+  const titleResult = await pool.query(titleQuery, titleParams);
+  if (titleResult.rows.length > 0) {
+    return titleResult.rows[0] as { slug: string; knowledgebase: string };
+  }
+  
+  return null;
+}
+
 export async function searchFiles(query: string, filters?: {
   level?: string;
   knowledgebase?: string;

@@ -159,6 +159,7 @@ export default function ReadPage() {
             <MarkdownRenderer
               content={file.content}
               onTOCUpdate={setToc}
+              knowledgebase={file.knowledgebase}
             />
           </div>
           
