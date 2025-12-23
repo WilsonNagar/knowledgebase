@@ -18,8 +18,9 @@ export default function Roadmap({ roadmap, compact = false }: RoadmapProps) {
     return acc;
   }, {} as Record<string, RoadmapNode[]>);
 
-  const levelOrder = ['beginner', 'intermediate', 'advanced', 'overachiever'];
-  const levelColors = {
+  const levelOrder = ['beginner', 'intermediate', 'advanced', 'overachiever'] as const;
+  type Level = typeof levelOrder[number];
+  const levelColors: Record<Level, string> = {
     beginner: 'bg-green-100 border-green-300 text-green-800 hover:bg-green-200',
     intermediate: 'bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200',
     advanced: 'bg-purple-100 border-purple-300 text-purple-800 hover:bg-purple-200',
@@ -48,7 +49,7 @@ export default function Roadmap({ roadmap, compact = false }: RoadmapProps) {
                     <Link
                       key={node.id}
                       href={`/read/${node.slug}?knowledgebase=${node.knowledgebase}`}
-                      className={`px-3 py-1 rounded text-xs border ${levelColors[level]} transition-shadow`}
+                      className={`px-3 py-1 rounded text-xs border ${levelColors[level as Level]} transition-shadow`}
                     >
                       {node.title}
                     </Link>
@@ -84,7 +85,7 @@ export default function Roadmap({ roadmap, compact = false }: RoadmapProps) {
           return (
             <div key={level} className="mb-12">
               <h3 className="text-lg font-semibold text-gray-800 mb-4 capitalize flex items-center">
-                <span className={`w-3 h-3 rounded-full mr-2 ${levelColors[level].split(' ')[0]}`}></span>
+                <span className={`w-3 h-3 rounded-full mr-2 ${levelColors[level as Level].split(' ')[0]}`}></span>
                 {level}
               </h3>
               <div className="flex flex-wrap gap-3 justify-center">
@@ -96,7 +97,7 @@ export default function Roadmap({ roadmap, compact = false }: RoadmapProps) {
                     <div key={node.id} className="relative">
                       <Link
                         href={`/read/${node.slug}?knowledgebase=${node.knowledgebase}`}
-                        className={`block px-4 py-2 rounded-lg border-2 text-sm font-medium transition-all ${levelColors[level]} ${
+                        className={`block px-4 py-2 rounded-lg border-2 text-sm font-medium transition-all ${levelColors[level as Level]} ${
                           hasPrereq ? 'border-l-4' : ''
                         }`}
                         style={{ minWidth: '180px', textAlign: 'center' }}

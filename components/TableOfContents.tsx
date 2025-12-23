@@ -69,7 +69,7 @@ export default function TableOfContents({ items }: TableOfContentsProps) {
     });
   };
 
-  const renderNode = (node: TOCNode, index: number): JSX.Element => {
+  const renderNode = (node: TOCNode, index: number): React.ReactElement => {
     const hasChildren = node.children.length > 0;
     const isExpanded = expandedItems.has(node.id);
 

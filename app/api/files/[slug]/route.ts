@@ -3,13 +3,14 @@ import { getFileBySlug } from '@/lib/db';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
+    const { slug } = await params;
     const searchParams = request.nextUrl.searchParams;
     const knowledgebase = searchParams.get('knowledgebase') || 'android';
     
-    const file = getFileBySlug(params.slug, knowledgebase);
+    const file = await getFileBySlug(slug, knowledgebase);
     
     if (!file) {
       return NextResponse.json(

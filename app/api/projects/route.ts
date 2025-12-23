@@ -8,23 +8,27 @@ export async function GET(request: NextRequest) {
     const topic = searchParams.get('topic');
     const level = searchParams.get('level');
 
-    const db = getDb();
+    const pool = getDb();
     let query = 'SELECT * FROM projects WHERE 1=1';
     const params: any[] = [];
+    let paramIndex = 1;
 
     if (topic) {
-      query += ' AND topic = ?';
+      query += ` AND topic = $${paramIndex}`;
       params.push(topic);
+      paramIndex++;
     }
 
     if (level) {
-      query += ' AND level = ?';
+      query += ` AND level = $${paramIndex}`;
       params.push(level);
+      paramIndex++;
     }
 
     query += ' ORDER BY level, title ASC';
 
-    const projects = db.prepare(query).all(...params) as any[];
+    const result = await pool.query(query, params);
+    const projects = result.rows;
 
     // Parse JSON fields
     const parsedProjects: Project[] = projects.map(p => ({
@@ -47,26 +51,26 @@ export async function POST(request: NextRequest) {
   try {
     const project: Project = await request.json();
 
-    const db = getDb();
+    const pool = getDb();
     
-    db.prepare(`
+    await pool.query(`
       INSERT INTO projects (
         canonical_id, slug, title, description, level, topic,
         requirements, topics_covered, estimated_hours, steps, prerequisites
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       ON CONFLICT(canonical_id) DO UPDATE SET
-        slug = excluded.slug,
-        title = excluded.title,
-        description = excluded.description,
-        level = excluded.level,
-        topic = excluded.topic,
-        requirements = excluded.requirements,
-        topics_covered = excluded.topics_covered,
-        estimated_hours = excluded.estimated_hours,
-        steps = excluded.steps,
-        prerequisites = excluded.prerequisites,
+        slug = EXCLUDED.slug,
+        title = EXCLUDED.title,
+        description = EXCLUDED.description,
+        level = EXCLUDED.level,
+        topic = EXCLUDED.topic,
+        requirements = EXCLUDED.requirements,
+        topics_covered = EXCLUDED.topics_covered,
+        estimated_hours = EXCLUDED.estimated_hours,
+        steps = EXCLUDED.steps,
+        prerequisites = EXCLUDED.prerequisites,
         updated_at = CURRENT_TIMESTAMP
-    `).run(
+    `, [
       project.canonical_id,
       project.slug,
       project.title,
@@ -78,7 +82,7 @@ export async function POST(request: NextRequest) {
       project.estimated_hours,
       JSON.stringify(project.steps),
       project.prerequisites ? JSON.stringify(project.prerequisites) : null
-    );
+    ]);
 
     return NextResponse.json({ success: true, message: 'Project created/updated' });
   } catch (error) {
@@ -89,4 +93,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

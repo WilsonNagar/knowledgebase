@@ -13,14 +13,15 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    const db = getDb();
+    const pool = getDb();
     
     // Get all files for this knowledge base
-    const files = db.prepare(`
+    const result = await pool.query(`
       SELECT DISTINCT file_path, level
       FROM knowledge_files
-      WHERE knowledgebase = ?
-    `).all(knowledgebase) as Array<{ file_path: string; level: string }>;
+      WHERE knowledgebase = $1
+    `, [knowledgebase]);
+    const files = result.rows as Array<{ file_path: string; level: string }>;
     
     // Extract topics from file paths
     // For computer_science: computer_science/databases/01_beginners/file.md
@@ -65,4 +66,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

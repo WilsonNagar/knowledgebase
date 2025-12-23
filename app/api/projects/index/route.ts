@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const projectsPath = body.path || './projects';
     
-    indexProjects(projectsPath);
+    await indexProjects(projectsPath);
     
     return NextResponse.json({ 
       success: true, 

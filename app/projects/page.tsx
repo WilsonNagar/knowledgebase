@@ -105,8 +105,8 @@ export default function ProjectsPage() {
             and interests
           </li>
           <li>
-            <strong>Review Requirements:</strong> Understand what you'll build and what
-            technologies you'll use
+            <strong>Review Requirements:</strong> Understand what you&apos;ll build and what
+            technologies you&apos;ll use
           </li>
           <li>
             <strong>Follow Step-by-Step Guide:</strong> Complete each step with detailed

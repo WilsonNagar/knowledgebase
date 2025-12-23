@@ -4,15 +4,17 @@ import { Project } from '@/types';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { topic: string; slug: string } }
+  { params }: { params: Promise<{ topic: string; slug: string }> }
 ) {
   try {
-    const db = getDb();
+    const { topic, slug } = await params;
+    const pool = getDb();
     
-    const project = db.prepare(`
+    const result = await pool.query(`
       SELECT * FROM projects
-      WHERE topic = ? AND slug = ?
-    `).get(params.topic, params.slug) as any;
+      WHERE topic = $1 AND slug = $2
+    `, [topic, slug]);
+    const project = result.rows[0] as any;
 
     if (!project) {
       return NextResponse.json(
@@ -37,4 +39,3 @@ export async function GET(
     );
   }
 }
-

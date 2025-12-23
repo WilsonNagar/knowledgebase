@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const topic = searchParams.get('topic');
     
     // Get all files for this knowledge base/topic
-    const files = getFiles({
+    const files = await getFiles({
       knowledgebase,
       topic: topic || undefined,
     });

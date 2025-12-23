@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const topic = searchParams.get('topic');
     const tags = searchParams.get('tags')?.split(',');
     
-    const files = getFiles({
+    const files = await getFiles({
       level: level || undefined,
       knowledgebase: knowledgebase || undefined,
       topic: topic || undefined,
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     
     if (action === 'reindex') {
       const knowledgebase = request.nextUrl.searchParams.get('knowledgebase') || './android';
-      indexFiles(knowledgebase);
+      await indexFiles(knowledgebase);
       return NextResponse.json({ success: true, message: 'Reindexed successfully' });
     }
     

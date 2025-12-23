@@ -1,31 +1,55 @@
-import Database from 'better-sqlite3';
-import { readFileSync, readdirSync, statSync } from 'fs';
+import { Pool, QueryResult } from 'pg';
+import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import matter from 'gray-matter';
 import { KnowledgeFile, KnowledgeBaseMetadata } from '@/types';
 
-const dbPath = process.env.DB_PATH || './data/knowledgebase.db';
-let db: Database.Database | null = null;
+let pool: Pool | null = null;
+let dbInitialized = false;
+let initPromise: Promise<void> | null = null;
 
-export function getDb(): Database.Database {
-  if (!db) {
-    const fs = require('fs');
-    const dir = require('path').dirname(dbPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+function getPool(): Pool {
+  if (!pool) {
+    const connectionString = process.env.DATABASE_URL || 
+      `postgresql://${process.env.POSTGRES_USER || 'knowledgebase'}:${process.env.POSTGRES_PASSWORD || 'knowledgebase_password'}@${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'knowledgebase'}`;
+    
+    pool = new Pool({
+      connectionString,
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
+    });
+
+    pool.on('error', (err: Error) => {
+      console.error('Unexpected error on idle client', err);
+    });
+
+    // Initialize database schema (fire and forget, but track the promise)
+    if (!initPromise) {
+      initPromise = initializeDb().catch(err => {
+        console.error('Failed to initialize database:', err);
+        dbInitialized = false;
+      });
     }
-    db = new Database(dbPath);
-    initializeDb();
   }
-  return db;
+  return pool;
 }
 
-function initializeDb() {
-  if (!db) return;
+// Helper to ensure DB is initialized before queries
+export async function ensureDbInitialized(): Promise<void> {
+  if (!dbInitialized && initPromise) {
+    await initPromise;
+    dbInitialized = true;
+  }
+}
+
+async function initializeDb(): Promise<void> {
+  const pool = getPool();
   
-  db.exec(`
+  try {
+    await pool.query(`
     CREATE TABLE IF NOT EXISTS knowledge_files (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       canonical_id TEXT UNIQUE NOT NULL,
       slug TEXT NOT NULL,
       title TEXT NOT NULL,
@@ -37,8 +61,8 @@ function initializeDb() {
       prerequisites TEXT,
       estimated_minutes INTEGER,
       content TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     
     CREATE INDEX IF NOT EXISTS idx_canonical_id ON knowledge_files(canonical_id);
@@ -46,15 +70,13 @@ function initializeDb() {
     CREATE INDEX IF NOT EXISTS idx_level ON knowledge_files(level);
     CREATE INDEX IF NOT EXISTS idx_knowledgebase ON knowledge_files(knowledgebase);
     
-    CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_files_fts USING fts5(
-      title,
-      content,
-      tags,
-      content_rowid=id
-    );
+    -- Create full-text search index using PostgreSQL's built-in full-text search
+    CREATE INDEX IF NOT EXISTS idx_fts_title ON knowledge_files USING gin(to_tsvector('english', title));
+    CREATE INDEX IF NOT EXISTS idx_fts_content ON knowledge_files USING gin(to_tsvector('english', content));
+    CREATE INDEX IF NOT EXISTS idx_fts_tags ON knowledge_files USING gin(to_tsvector('english', COALESCE(tags, '')));
     
     CREATE TABLE IF NOT EXISTS projects (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       canonical_id TEXT UNIQUE NOT NULL,
       slug TEXT NOT NULL,
       title TEXT NOT NULL,
@@ -66,8 +88,8 @@ function initializeDb() {
       estimated_hours INTEGER,
       steps TEXT NOT NULL,
       prerequisites TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     
     CREATE INDEX IF NOT EXISTS idx_project_canonical_id ON projects(canonical_id);
@@ -75,10 +97,21 @@ function initializeDb() {
     CREATE INDEX IF NOT EXISTS idx_project_level ON projects(level);
     CREATE INDEX IF NOT EXISTS idx_project_topic ON projects(topic);
   `);
+    dbInitialized = true;
+    console.log('Database initialized successfully');
+  } catch (error) {
+    console.error('Error initializing database:', error);
+    throw error;
+  }
 }
 
-export function indexFiles(knowledgebasePath: string = './android') {
-  const db = getDb();
+// Legacy getDb function for backward compatibility - returns pool
+export function getDb(): Pool {
+  return getPool();
+}
+
+export async function indexFiles(knowledgebasePath: string = './android') {
+  const pool = getPool();
   const knowledgebase = knowledgebasePath.split('/').pop() || 'android';
   
   // Normalize level names (e.g., "beginners" -> "beginner")
@@ -92,7 +125,7 @@ export function indexFiles(knowledgebasePath: string = './android') {
     return normalized;
   }
 
-  function scanDirectory(dir: string, level?: string): void {
+  async function scanDirectory(dir: string, level?: string): Promise<void> {
     const entries = readdirSync(dir, { withFileTypes: true });
     
     for (const entry of entries) {
@@ -101,7 +134,7 @@ export function indexFiles(knowledgebasePath: string = './android') {
       if (entry.isDirectory()) {
         const extractedLevel = entry.name.match(/^\d+_(.+)$/)?.[1];
         const newLevel = extractedLevel ? normalizeLevel(extractedLevel) : level;
-        scanDirectory(fullPath, newLevel);
+        await scanDirectory(fullPath, newLevel);
       } else if (entry.isFile() && entry.name.endsWith('.md')) {
         try {
           const content = readFileSync(fullPath, 'utf-8');
@@ -124,23 +157,23 @@ export function indexFiles(knowledgebasePath: string = './android') {
           };
           
           // Insert or update
-          db.prepare(`
+          await pool.query(`
             INSERT INTO knowledge_files (
               canonical_id, slug, title, level, number, file_path,
               knowledgebase, tags, prerequisites, estimated_minutes, content
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             ON CONFLICT(canonical_id) DO UPDATE SET
-              slug = excluded.slug,
-              title = excluded.title,
-              level = excluded.level,
-              number = excluded.number,
-              file_path = excluded.file_path,
-              tags = excluded.tags,
-              prerequisites = excluded.prerequisites,
-              estimated_minutes = excluded.estimated_minutes,
-              content = excluded.content,
+              slug = EXCLUDED.slug,
+              title = EXCLUDED.title,
+              level = EXCLUDED.level,
+              number = EXCLUDED.number,
+              file_path = EXCLUDED.file_path,
+              tags = EXCLUDED.tags,
+              prerequisites = EXCLUDED.prerequisites,
+              estimated_minutes = EXCLUDED.estimated_minutes,
+              content = EXCLUDED.content,
               updated_at = CURRENT_TIMESTAMP
-          `).run(
+          `, [
             file.canonical_id,
             file.slug,
             file.title,
@@ -152,20 +185,7 @@ export function indexFiles(knowledgebasePath: string = './android') {
             file.prerequisites,
             file.estimated_minutes,
             file.content
-          );
-          
-          // Update FTS
-          const rowId = db.prepare('SELECT id FROM knowledge_files WHERE canonical_id = ?')
-            .get(file.canonical_id) as { id: number };
-          
-          db.prepare(`
-            INSERT INTO knowledge_files_fts(rowid, title, content, tags)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(rowid) DO UPDATE SET
-              title = excluded.title,
-              content = excluded.content,
-              tags = excluded.tags
-          `).run(rowId.id, file.title, file.content, file.tags);
+          ]);
           
         } catch (error) {
           console.error(`Error indexing ${fullPath}:`, error);
@@ -174,101 +194,121 @@ export function indexFiles(knowledgebasePath: string = './android') {
     }
   }
   
-  scanDirectory(knowledgebasePath);
+  await scanDirectory(knowledgebasePath);
 }
 
-export function getFiles(filters?: {
+export async function getFiles(filters?: {
   level?: string;
   knowledgebase?: string;
   tags?: string[];
   topic?: string;
-}): KnowledgeFile[] {
-  const db = getDb();
+}): Promise<KnowledgeFile[]> {
+  const pool = getPool();
   let query = 'SELECT * FROM knowledge_files WHERE 1=1';
   const params: any[] = [];
+  let paramIndex = 1;
   
   if (filters?.level) {
-    query += ' AND level = ?';
+    query += ` AND level = $${paramIndex}`;
     params.push(filters.level);
+    paramIndex++;
   }
   
   if (filters?.knowledgebase) {
-    query += ' AND knowledgebase = ?';
+    query += ` AND knowledgebase = $${paramIndex}`;
     params.push(filters.knowledgebase);
+    paramIndex++;
   }
   
   if (filters?.topic) {
-    // Filter by topic: file_path should contain /topic/ (e.g., /databases/)
-    query += ' AND file_path LIKE ?';
+    query += ` AND file_path LIKE $${paramIndex}`;
     params.push(`%/${filters.topic}/%`);
+    paramIndex++;
   }
   
   if (filters?.tags && filters.tags.length > 0) {
     query += ' AND (';
-    query += filters.tags.map(() => 'tags LIKE ?').join(' OR ');
+    const tagConditions = filters.tags.map(() => {
+      const condition = `tags LIKE $${paramIndex}`;
+      paramIndex++;
+      return condition;
+    });
+    query += tagConditions.join(' OR ');
     query += ')';
     filters.tags.forEach(tag => params.push(`%${tag}%`));
   }
   
   query += ' ORDER BY number ASC';
   
-  return db.prepare(query).all(...params) as KnowledgeFile[];
+  const result = await pool.query(query, params);
+  return result.rows as KnowledgeFile[];
 }
 
-export function getFileBySlug(slug: string, knowledgebase?: string): KnowledgeFile | null {
-  const db = getDb();
-  let query = 'SELECT * FROM knowledge_files WHERE slug = ?';
+export async function getFileBySlug(slug: string, knowledgebase?: string): Promise<KnowledgeFile | null> {
+  const pool = getPool();
+  let query = 'SELECT * FROM knowledge_files WHERE slug = $1';
   const params: any[] = [slug];
   
   if (knowledgebase) {
-    query += ' AND knowledgebase = ?';
+    query += ' AND knowledgebase = $2';
     params.push(knowledgebase);
   }
   
-  return db.prepare(query).get(...params) as KnowledgeFile | null;
+  const result = await pool.query(query, params);
+  return result.rows[0] as KnowledgeFile | null || null;
 }
 
-export function getFileById(id: number): KnowledgeFile | null {
-  const db = getDb();
-  return db.prepare('SELECT * FROM knowledge_files WHERE id = ?').get(id) as KnowledgeFile | null;
+export async function getFileById(id: number): Promise<KnowledgeFile | null> {
+  const pool = getPool();
+  const result = await pool.query('SELECT * FROM knowledge_files WHERE id = $1', [id]);
+  return result.rows[0] as KnowledgeFile | null || null;
 }
 
-export function searchFiles(query: string, filters?: {
+export async function searchFiles(query: string, filters?: {
   level?: string;
   knowledgebase?: string;
   topic?: string;
-}): KnowledgeFile[] {
-  const db = getDb();
+}): Promise<KnowledgeFile[]> {
+  const pool = getPool();
   
+  // Use PostgreSQL full-text search
   let ftsQuery = `
     SELECT kf.* FROM knowledge_files kf
-    JOIN knowledge_files_fts fts ON kf.id = fts.rowid
-    WHERE knowledge_files_fts MATCH ?
+    WHERE (
+      to_tsvector('english', kf.title) @@ plainto_tsquery('english', $1)
+      OR to_tsvector('english', kf.content) @@ plainto_tsquery('english', $1)
+      OR to_tsvector('english', COALESCE(kf.tags, '')) @@ plainto_tsquery('english', $1)
+    )
   `;
   const params: any[] = [query];
+  let paramIndex = 2;
   
   if (filters?.level) {
-    ftsQuery += ' AND kf.level = ?';
+    ftsQuery += ` AND kf.level = $${paramIndex}`;
     params.push(filters.level);
+    paramIndex++;
   }
   
   if (filters?.knowledgebase) {
-    ftsQuery += ' AND kf.knowledgebase = ?';
+    ftsQuery += ` AND kf.knowledgebase = $${paramIndex}`;
     params.push(filters.knowledgebase);
+    paramIndex++;
   }
   
   if (filters?.topic) {
-    ftsQuery += ' AND kf.file_path LIKE ?';
+    ftsQuery += ` AND kf.file_path LIKE $${paramIndex}`;
     params.push(`%/${filters.topic}/%`);
+    paramIndex++;
   }
   
   ftsQuery += ' ORDER BY kf.number ASC';
   
-  return db.prepare(ftsQuery).all(...params) as KnowledgeFile[];
+  const result = await pool.query(ftsQuery, params);
+  return result.rows as KnowledgeFile[];
 }
 
-export function indexProjects(projectsPath: string = './projects') {
-  const db = getDb();
+export async function indexProjects(projectsPath: string = './projects') {
+  const pool = getPool();
   const { readFileSync, readdirSync } = require('fs');
   const { join } = require('path');
   const matter = require('gray-matter');
@@ -335,7 +375,7 @@ export function indexProjects(projectsPath: string = './projects') {
                 const knowledgebase = pathParts[androidIndex];
                 const levelFolder = pathParts[androidIndex + 1];
                 // Construct file path relative to project root
-                const projectRoot = knowledgebasePath.replace(/\/projects.*$/, '');
+                const projectRoot = projectsPath.replace(/\/projects.*$/, '');
                 const filePath = join(projectRoot, knowledgebase, levelFolder, filename + '.md');
                 
                 try {
@@ -354,38 +394,41 @@ export function indexProjects(projectsPath: string = './projects') {
                     }
                   } else {
                     // File not found, try to look up in database by filename pattern
-                    const db = getDb();
-                    const fileQuery = db.prepare(`
-                      SELECT canonical_id, slug FROM knowledge_files 
-                      WHERE knowledgebase = ? AND file_path LIKE ?
-                      LIMIT 1
-                    `);
-                    const result = fileQuery.get(knowledgebase, `%/${filename}.md`) as { canonical_id?: string; slug?: string } | undefined;
-                    if (result) {
-                      guideRefs.push(result.canonical_id || result.slug || filename);
-                    } else {
-                      guideRefs.push(filename);
-                    }
+                    (async () => {
+                      try {
+                        const result = await pool.query(`
+                          SELECT canonical_id, slug FROM knowledge_files 
+                          WHERE knowledgebase = $1 AND file_path LIKE $2
+                          LIMIT 1
+                        `, [knowledgebase, `%/${filename}.md`]);
+                        if (result.rows.length > 0) {
+                          guideRefs.push(result.rows[0].canonical_id || result.rows[0].slug || filename);
+                        } else {
+                          guideRefs.push(filename);
+                        }
+                      } catch (error) {
+                        guideRefs.push(filename);
+                      }
+                    })();
                   }
                 } catch (error) {
                   // Error reading file, try database lookup
-                  try {
-                    const db = getDb();
-                    const fileQuery = db.prepare(`
-                      SELECT canonical_id, slug FROM knowledge_files 
-                      WHERE knowledgebase = ? AND file_path LIKE ?
-                      LIMIT 1
-                    `);
-                    const result = fileQuery.get(knowledgebase, `%/${filename}.md`) as { canonical_id?: string; slug?: string } | undefined;
-                    if (result) {
-                      guideRefs.push(result.canonical_id || result.slug || filename);
-                    } else {
+                  (async () => {
+                    try {
+                      const result = await pool.query(`
+                        SELECT canonical_id, slug FROM knowledge_files 
+                        WHERE knowledgebase = $1 AND file_path LIKE $2
+                        LIMIT 1
+                      `, [knowledgebase, `%/${filename}.md`]);
+                      if (result.rows.length > 0) {
+                        guideRefs.push(result.rows[0].canonical_id || result.rows[0].slug || filename);
+                      } else {
+                        guideRefs.push(filename);
+                      }
+                    } catch (dbError) {
                       guideRefs.push(filename);
                     }
-                  } catch (dbError) {
-                    // Final fallback to filename
-                    guideRefs.push(filename);
-                  }
+                  })();
                 }
               } else {
                 // Can't parse path, use filename
@@ -443,7 +486,7 @@ export function indexProjects(projectsPath: string = './projects') {
     return reqMatch ? reqMatch[0] : content.substring(0, 1000);
   }
   
-  function scanDirectory(dir: string, level?: string): void {
+  async function scanDirectory(dir: string, level?: string): Promise<void> {
     const entries = readdirSync(dir, { withFileTypes: true });
     
     for (const entry of entries) {
@@ -452,7 +495,7 @@ export function indexProjects(projectsPath: string = './projects') {
       if (entry.isDirectory()) {
         const extractedLevel = entry.name.match(/^\d+_(.+)$/)?.[1];
         const newLevel = extractedLevel ? normalizeLevel(extractedLevel) : level;
-        scanDirectory(fullPath, newLevel);
+        await scanDirectory(fullPath, newLevel);
       } else if (entry.isFile() && entry.name.endsWith('.md')) {
         try {
           const content = readFileSync(fullPath, 'utf-8');
@@ -480,24 +523,24 @@ export function indexProjects(projectsPath: string = './projects') {
               : null,
           };
           
-          db.prepare(`
+          await pool.query(`
             INSERT INTO projects (
               canonical_id, slug, title, description, level, topic,
               requirements, topics_covered, estimated_hours, steps, prerequisites
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             ON CONFLICT(canonical_id) DO UPDATE SET
-              slug = excluded.slug,
-              title = excluded.title,
-              description = excluded.description,
-              level = excluded.level,
-              topic = excluded.topic,
-              requirements = excluded.requirements,
-              topics_covered = excluded.topics_covered,
-              estimated_hours = excluded.estimated_hours,
-              steps = excluded.steps,
-              prerequisites = excluded.prerequisites,
+              slug = EXCLUDED.slug,
+              title = EXCLUDED.title,
+              description = EXCLUDED.description,
+              level = EXCLUDED.level,
+              topic = EXCLUDED.topic,
+              requirements = EXCLUDED.requirements,
+              topics_covered = EXCLUDED.topics_covered,
+              estimated_hours = EXCLUDED.estimated_hours,
+              steps = EXCLUDED.steps,
+              prerequisites = EXCLUDED.prerequisites,
               updated_at = CURRENT_TIMESTAMP
-          `).run(
+          `, [
             project.canonical_id,
             project.slug,
             project.title,
@@ -509,7 +552,7 @@ export function indexProjects(projectsPath: string = './projects') {
             project.estimated_hours,
             project.steps,
             project.prerequisites
-          );
+          ]);
           
         } catch (error) {
           console.error(`Error indexing ${fullPath}:`, error);
@@ -518,25 +561,24 @@ export function indexProjects(projectsPath: string = './projects') {
     }
   }
   
-  scanDirectory(projectsPath);
+  await scanDirectory(projectsPath);
 }
 
-export function getKnowledgeBases(): KnowledgeBaseMetadata[] {
-  const db = getDb();
-  const bases = db.prepare(`
+export async function getKnowledgeBases(): Promise<KnowledgeBaseMetadata[]> {
+  const pool = getPool();
+  const result = await pool.query(`
     SELECT 
       knowledgebase,
       COUNT(*) as file_count,
       COUNT(DISTINCT level) as level_count
     FROM knowledge_files
     GROUP BY knowledgebase
-  `).all() as Array<{ knowledgebase: string; file_count: number; level_count: number }>;
+  `);
   
-  return bases.map(base => ({
+  return result.rows.map((base: { knowledgebase: string; file_count: string; level_count: string }) => ({
     name: base.knowledgebase,
     path: `./${base.knowledgebase}`,
-    fileCount: base.file_count,
-    levelCount: base.level_count,
+    fileCount: parseInt(base.file_count, 10),
+    levelCount: parseInt(base.level_count, 10),
   }));
 }
-

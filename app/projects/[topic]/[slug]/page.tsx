@@ -513,7 +513,7 @@ export default function ProjectDetailPage() {
             🎉 Great Progress!
           </h3>
           <p className="text-gray-600">
-            You've completed {completedChallenges.size} out of {challenges.length} challenges. 
+            You&apos;ve completed {completedChallenges.size} out of {challenges.length} challenges. 
             Keep up the excellent work!
           </p>
         </div>

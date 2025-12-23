@@ -3,16 +3,17 @@ import { getDb } from '@/lib/db';
 
 export async function GET() {
   try {
-    const db = getDb();
+    const pool = getDb();
     
-    const topics = db.prepare(`
+    const result = await pool.query(`
       SELECT 
         topic as name,
         COUNT(*) as projectCount
       FROM projects
       GROUP BY topic
       ORDER BY topic ASC
-    `).all() as Array<{ name: string; projectCount: number }>;
+    `);
+    const topics = result.rows as Array<{ name: string; projectCount: string }>;
 
     const topicDisplayNames: Record<string, string> = {
       android: 'Android Development',
@@ -27,7 +28,7 @@ export async function GET() {
     const topicsWithDisplay = topics.map(topic => ({
       name: topic.name,
       displayName: topicDisplayNames[topic.name] || topic.name.charAt(0).toUpperCase() + topic.name.slice(1),
-      projectCount: topic.projectCount,
+      projectCount: parseInt(topic.projectCount, 10),
     }));
 
     return NextResponse.json({ topics: topicsWithDisplay });
@@ -39,4 +40,3 @@ export async function GET() {
     );
   }
 }
-

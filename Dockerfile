@@ -31,6 +31,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/android ./android
 COPY --from=builder /app/data ./data
+COPY --from=builder /app/scripts ./scripts
 
 USER nextjs
 

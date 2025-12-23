@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Roadmap from '@/components/Roadmap';
 import { Roadmap as RoadmapType } from '@/types';
 
-export default function RoadmapPage() {
+function RoadmapContent() {
   const searchParams = useSearchParams();
   const knowledgebase = searchParams.get('knowledgebase') || 'android';
   const topic = searchParams.get('topic');
@@ -67,6 +67,18 @@ export default function RoadmapPage() {
       
       <Roadmap roadmap={roadmap} compact={false} />
     </div>
+  );
+}
+
+export default function RoadmapPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="text-center">Loading roadmap...</div>
+      </div>
+    }>
+      <RoadmapContent />
+    </Suspense>
   );
 }
 

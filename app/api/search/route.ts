@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ files: [] });
     }
     
-    const files = searchFiles(query, {
+    const files = await searchFiles(query, {
       level: level || undefined,
       knowledgebase,
       topic: topic || undefined,

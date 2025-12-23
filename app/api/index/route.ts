@@ -3,7 +3,7 @@ import { indexFiles, getKnowledgeBases } from '@/lib/db';
 
 export async function GET() {
   try {
-    const bases = getKnowledgeBases();
+    const bases = await getKnowledgeBases();
     return NextResponse.json({ knowledgebases: bases });
   } catch (error) {
     console.error('Error fetching knowledge bases:', error);
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     
     const path = knowledgebasePaths[knowledgebase] || `./${knowledgebase}`;
     
-    indexFiles(path);
+    await indexFiles(path);
     
     return NextResponse.json({ 
       success: true, 
