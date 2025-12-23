@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('q') || '';
     const level = searchParams.get('level');
-    const knowledgebase = searchParams.get('knowledgebase') || 'android';
+    const knowledgebase = searchParams.get('knowledgebase');
     const topic = searchParams.get('topic');
     
     if (!query.trim()) {
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     
     const files = await searchFiles(query, {
       level: level || undefined,
-      knowledgebase,
+      knowledgebase: knowledgebase || undefined,
       topic: topic || undefined,
     });
     
