@@ -272,6 +272,7 @@ export async function getFileByFilename(filename: string, knowledgebase?: string
   // Decode URL encoding
   const decodedFilename = decodeURIComponent(cleanFilename);
   
+  // Try exact file_path match first
   let query = `
     SELECT slug, knowledgebase 
     FROM knowledge_files 
@@ -295,7 +296,36 @@ export async function getFileByFilename(filename: string, knowledgebase?: string
     return result.rows[0] as { slug: string; knowledgebase: string };
   }
   
-  // Try matching by title if filename doesn't match
+  // Strip number prefix (e.g., "20. Advanced Coroutines" -> "Advanced Coroutines")
+  const filenameWithoutNumber = decodedFilename.replace(/^\d+\.\s*/, '').trim();
+  
+  // Try matching file_path without number prefix
+  if (filenameWithoutNumber !== decodedFilename) {
+    let queryWithoutNumber = `
+      SELECT slug, knowledgebase 
+      FROM knowledge_files 
+      WHERE file_path LIKE $1
+      LIMIT 1
+    `;
+    const paramsWithoutNumber: any[] = [`%/${filenameWithoutNumber}.md`];
+    
+    if (knowledgebase) {
+      queryWithoutNumber = `
+        SELECT slug, knowledgebase 
+        FROM knowledge_files 
+        WHERE file_path LIKE $1 AND knowledgebase = $2
+        LIMIT 1
+      `;
+      paramsWithoutNumber.push(knowledgebase);
+    }
+    
+    const resultWithoutNumber = await pool.query(queryWithoutNumber, paramsWithoutNumber);
+    if (resultWithoutNumber.rows.length > 0) {
+      return resultWithoutNumber.rows[0] as { slug: string; knowledgebase: string };
+    }
+  }
+  
+  // Try matching by exact title
   let titleQuery = `
     SELECT slug, knowledgebase 
     FROM knowledge_files 
@@ -317,6 +347,56 @@ export async function getFileByFilename(filename: string, knowledgebase?: string
   const titleResult = await pool.query(titleQuery, titleParams);
   if (titleResult.rows.length > 0) {
     return titleResult.rows[0] as { slug: string; knowledgebase: string };
+  }
+  
+  // Try matching by title without number prefix
+  if (filenameWithoutNumber !== decodedFilename) {
+    let titleQueryWithoutNumber = `
+      SELECT slug, knowledgebase 
+      FROM knowledge_files 
+      WHERE title = $1
+      LIMIT 1
+    `;
+    const titleParamsWithoutNumber: any[] = [filenameWithoutNumber];
+    
+    if (knowledgebase) {
+      titleQueryWithoutNumber = `
+        SELECT slug, knowledgebase 
+        FROM knowledge_files 
+        WHERE title = $1 AND knowledgebase = $2
+        LIMIT 1
+      `;
+      titleParamsWithoutNumber.push(knowledgebase);
+    }
+    
+    const titleResultWithoutNumber = await pool.query(titleQueryWithoutNumber, titleParamsWithoutNumber);
+    if (titleResultWithoutNumber.rows.length > 0) {
+      return titleResultWithoutNumber.rows[0] as { slug: string; knowledgebase: string };
+    }
+  }
+  
+  // Try partial title match (case-insensitive) as last resort
+  let partialQuery = `
+    SELECT slug, knowledgebase 
+    FROM knowledge_files 
+    WHERE LOWER(title) LIKE LOWER($1)
+    LIMIT 1
+  `;
+  const partialParams: any[] = [`%${filenameWithoutNumber}%`];
+  
+  if (knowledgebase) {
+    partialQuery = `
+      SELECT slug, knowledgebase 
+      FROM knowledge_files 
+      WHERE LOWER(title) LIKE LOWER($1) AND knowledgebase = $2
+      LIMIT 1
+    `;
+    partialParams.push(knowledgebase);
+  }
+  
+  const partialResult = await pool.query(partialQuery, partialParams);
+  if (partialResult.rows.length > 0) {
+    return partialResult.rows[0] as { slug: string; knowledgebase: string };
   }
   
   return null;
