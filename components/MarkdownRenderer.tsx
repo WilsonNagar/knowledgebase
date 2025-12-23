@@ -52,23 +52,61 @@ export default function MarkdownRenderer({ content, onTOCUpdate, knowledgebase }
       });
 
       // Transform relative .md links to proper Next.js routes
-      const links = contentRef.current.querySelectorAll('a[href]');
       const transformLinks = async () => {
-        for (const link of links) {
-          const href = (link as HTMLAnchorElement).getAttribute('href');
-          if (href && (href.endsWith('.md') || href.includes('.md'))) {
-            // Prevent navigation until link is transformed
-            (link as HTMLAnchorElement).onclick = (e) => {
-              e.preventDefault();
-            };
+        if (!contentRef.current) return;
+        
+        // Use requestAnimationFrame to ensure DOM is ready
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        
+        const links = contentRef.current.querySelectorAll('a[href]');
+        const transformPromises = Array.from(links).map(async (linkElement) => {
+          const link = linkElement as HTMLAnchorElement;
+          const href = link.getAttribute('href');
+          
+          // Skip if already transformed or not a markdown link
+          if (!href || href.startsWith('/read/') || (!href.endsWith('.md') && !href.includes('.md'))) {
+            return;
+          }
+          
+          // Skip if already processed (has data attribute)
+          if (link.hasAttribute('data-link-transformed')) {
+            return;
+          }
+          
+          // Mark as being processed
+          link.setAttribute('data-link-transformed', 'true');
+          
+          // Prevent navigation until link is transformed
+          link.onclick = (e) => {
+            e.preventDefault();
+          };
+          
+          // Extract filename from href (handle relative paths like ./filename.md or ../path/filename.md)
+          // Try to get the last part of the path that ends with .md
+          const filenameMatch = href.match(/([^/]+)\.md(?:\?.*)?$/);
+          if (filenameMatch) {
+            let filename = decodeURIComponent(filenameMatch[1]);
             
-            // Extract filename from href (handle relative paths like ./filename.md or ../path/filename.md)
-            const filenameMatch = href.match(/([^/]+)\.md/);
-            if (filenameMatch) {
-              const filename = decodeURIComponent(filenameMatch[1]);
+            // Try multiple resolution strategies
+            let resolved = false;
+            const strategies = [
+              // Strategy 1: Try exact filename
+              filename,
+              // Strategy 2: Try without number prefix (e.g., "05. Title" -> "Title")
+              filename.replace(/^\d+\.\s*/, '').trim(),
+              // Strategy 3: Try with just the main title part (remove prefixes/suffixes)
+              filename.replace(/^\d+\.\s*/, '').replace(/\s*-\s*.*$/, '').trim(),
+            ];
+            
+            // Remove duplicates
+            const uniqueStrategies = [...new Set(strategies.filter(s => s.length > 0))];
+            
+            for (const strategy of uniqueStrategies) {
+              if (resolved) break;
+              
               try {
                 const params = new URLSearchParams();
-                params.set('filename', filename);
+                params.set('filename', strategy);
                 if (knowledgebase) {
                   params.set('knowledgebase', knowledgebase);
                 }
@@ -77,29 +115,39 @@ export default function MarkdownRenderer({ content, onTOCUpdate, knowledgebase }
                 if (res.ok) {
                   const data = await res.json();
                   const newHref = `/read/${data.slug}?knowledgebase=${data.knowledgebase}`;
-                  (link as HTMLAnchorElement).setAttribute('href', newHref);
+                  link.setAttribute('href', newHref);
                   // Update click handler to use Next.js router for client-side navigation
-                  (link as HTMLAnchorElement).onclick = (e) => {
+                  link.onclick = (e) => {
                     e.preventDefault();
                     router.push(newHref);
                   };
-                } else {
-                  // If resolution fails, make it non-clickable
-                  console.warn(`Could not resolve file: ${filename}`);
-                  (link as HTMLAnchorElement).style.pointerEvents = 'none';
-                  (link as HTMLAnchorElement).style.opacity = '0.5';
-                  (link as HTMLAnchorElement).title = `File not found: ${filename}`;
+                  // Remove disabled styling if it was applied
+                  link.style.pointerEvents = '';
+                  link.style.opacity = '';
+                  link.style.cursor = '';
+                  link.title = '';
+                  resolved = true;
                 }
               } catch (error) {
-                console.error(`Error resolving file ${filename}:`, error);
-                (link as HTMLAnchorElement).style.pointerEvents = 'none';
-                (link as HTMLAnchorElement).style.opacity = '0.5';
-                (link as HTMLAnchorElement).title = `Error resolving file: ${filename}`;
+                // Continue to next strategy
+                continue;
               }
             }
+            
+            if (!resolved) {
+              // If all strategies fail, make it non-clickable but show helpful message
+              console.warn(`Could not resolve file: ${filename} (tried: ${uniqueStrategies.join(', ')})`);
+              link.style.pointerEvents = 'none';
+              link.style.opacity = '0.5';
+              link.style.cursor = 'not-allowed';
+              link.title = `File not found: ${filename}`;
+            }
           }
-        }
+        });
+        
+        await Promise.all(transformPromises);
       };
+      
       transformLinks();
     }
   }, [html, knowledgebase, router]);

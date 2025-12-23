@@ -325,11 +325,11 @@ export async function getFileByFilename(filename: string, knowledgebase?: string
     }
   }
   
-  // Try matching by exact title
+  // Try matching by exact title (case-insensitive)
   let titleQuery = `
     SELECT slug, knowledgebase 
     FROM knowledge_files 
-    WHERE title = $1
+    WHERE LOWER(title) = LOWER($1)
     LIMIT 1
   `;
   const titleParams: any[] = [decodedFilename];
@@ -338,7 +338,7 @@ export async function getFileByFilename(filename: string, knowledgebase?: string
     titleQuery = `
       SELECT slug, knowledgebase 
       FROM knowledge_files 
-      WHERE title = $1 AND knowledgebase = $2
+      WHERE LOWER(title) = LOWER($1) AND knowledgebase = $2
       LIMIT 1
     `;
     titleParams.push(knowledgebase);
@@ -349,12 +349,12 @@ export async function getFileByFilename(filename: string, knowledgebase?: string
     return titleResult.rows[0] as { slug: string; knowledgebase: string };
   }
   
-  // Try matching by title without number prefix
+  // Try matching by title without number prefix (case-insensitive)
   if (filenameWithoutNumber !== decodedFilename) {
     let titleQueryWithoutNumber = `
       SELECT slug, knowledgebase 
       FROM knowledge_files 
-      WHERE title = $1
+      WHERE LOWER(title) = LOWER($1)
       LIMIT 1
     `;
     const titleParamsWithoutNumber: any[] = [filenameWithoutNumber];
@@ -363,7 +363,7 @@ export async function getFileByFilename(filename: string, knowledgebase?: string
       titleQueryWithoutNumber = `
         SELECT slug, knowledgebase 
         FROM knowledge_files 
-        WHERE title = $1 AND knowledgebase = $2
+        WHERE LOWER(title) = LOWER($1) AND knowledgebase = $2
         LIMIT 1
       `;
       titleParamsWithoutNumber.push(knowledgebase);
@@ -376,13 +376,14 @@ export async function getFileByFilename(filename: string, knowledgebase?: string
   }
   
   // Try partial title match (case-insensitive) as last resort
+  // First try the full title without number
   let partialQuery = `
     SELECT slug, knowledgebase 
     FROM knowledge_files 
     WHERE LOWER(title) LIKE LOWER($1)
     LIMIT 1
   `;
-  const partialParams: any[] = [`%${filenameWithoutNumber}%`];
+  let partialParams: any[] = [`%${filenameWithoutNumber}%`];
   
   if (knowledgebase) {
     partialQuery = `
@@ -394,9 +395,74 @@ export async function getFileByFilename(filename: string, knowledgebase?: string
     partialParams.push(knowledgebase);
   }
   
-  const partialResult = await pool.query(partialQuery, partialParams);
+  let partialResult = await pool.query(partialQuery, partialParams);
   if (partialResult.rows.length > 0) {
     return partialResult.rows[0] as { slug: string; knowledgebase: string };
+  }
+  
+  // Try matching with key words from the title (for multi-word titles)
+  // Extract significant words (ignore common words like "the", "a", "an", "and", "or", "of", "in", "on", "at", "to", "for")
+  const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'from', 'as', 'is', 'are', 'was', 'were']);
+  const words = filenameWithoutNumber
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(word => word.length > 2 && !stopWords.has(word))
+    .slice(0, 3); // Take up to 3 most significant words
+  
+  if (words.length > 0) {
+    // Try matching with all significant words
+    const keywordPattern = words.join('%');
+    partialQuery = `
+      SELECT slug, knowledgebase 
+      FROM knowledge_files 
+      WHERE LOWER(title) LIKE LOWER($1)
+      LIMIT 1
+    `;
+    partialParams = [`%${keywordPattern}%`];
+    
+    if (knowledgebase) {
+      partialQuery = `
+        SELECT slug, knowledgebase 
+        FROM knowledge_files 
+        WHERE LOWER(title) LIKE LOWER($1) AND knowledgebase = $2
+        LIMIT 1
+      `;
+      partialParams.push(knowledgebase);
+    }
+    
+    partialResult = await pool.query(partialQuery, partialParams);
+    if (partialResult.rows.length > 0) {
+      return partialResult.rows[0] as { slug: string; knowledgebase: string };
+    }
+    
+    // Try matching with individual significant words (take the longest/most specific)
+    if (words.length > 1) {
+      const longestWord = words.reduce((a, b) => a.length > b.length ? a : b);
+      partialQuery = `
+        SELECT slug, knowledgebase 
+        FROM knowledge_files 
+        WHERE LOWER(title) LIKE LOWER($1)
+        ORDER BY LENGTH(title) ASC
+        LIMIT 1
+      `;
+      partialParams = [`%${longestWord}%`];
+      
+      if (knowledgebase) {
+        partialQuery = `
+          SELECT slug, knowledgebase 
+          FROM knowledge_files 
+          WHERE LOWER(title) LIKE LOWER($1) AND knowledgebase = $2
+          ORDER BY LENGTH(title) ASC
+          LIMIT 1
+        `;
+        partialParams.push(knowledgebase);
+      }
+      
+      partialResult = await pool.query(partialQuery, partialParams);
+      if (partialResult.rows.length > 0) {
+        return partialResult.rows[0] as { slug: string; knowledgebase: string };
+      }
+    }
   }
   
   return null;
