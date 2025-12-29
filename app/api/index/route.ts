@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { indexFiles, getKnowledgeBases } from '@/lib/db';
+import { join } from 'path';
 
 export async function GET() {
   try {
@@ -19,17 +20,19 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const knowledgebase = body.knowledgebase || 'android';
     
-    // Map knowledgebase names to paths
+    // Map knowledgebase names to paths - use process.cwd() to ensure correct path resolution
+    const projectRoot = process.cwd();
     const knowledgebasePaths: Record<string, string> = {
-      'android': './android',
-      'devops': './devops',
-      'backend': './backend',
-      'golang': './golang',
-      'computer_science': './computer_science',
-      'computer-science': './computer_science',
+      'android': join(projectRoot, 'android'),
+      'devops': join(projectRoot, 'devops'),
+      'backend': join(projectRoot, 'backend'),
+      'golang': join(projectRoot, 'golang'),
+      'aosp': join(projectRoot, 'aosp'),
+      'computer_science': join(projectRoot, 'computer_science'),
+      'computer-science': join(projectRoot, 'computer_science'),
     };
     
-    const path = knowledgebasePaths[knowledgebase] || `./${knowledgebase}`;
+    const path = knowledgebasePaths[knowledgebase] || join(projectRoot, knowledgebase);
     
     await indexFiles(path);
     

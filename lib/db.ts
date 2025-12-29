@@ -112,7 +112,11 @@ export function getDb(): Pool {
 
 export async function indexFiles(knowledgebasePath: string = './android') {
   const pool = getPool();
-  const knowledgebase = knowledgebasePath.split('/').pop() || 'android';
+  // Resolve to absolute path and extract knowledgebase name
+  const resolvedPath = knowledgebasePath.startsWith('.') 
+    ? join(process.cwd(), knowledgebasePath.replace(/^\.\//, ''))
+    : knowledgebasePath;
+  const knowledgebase = resolvedPath.split(/[/\\]/).pop() || 'android';
   
   // Normalize level names (e.g., "beginners" -> "beginner")
   function normalizeLevel(level?: string): string {
@@ -194,7 +198,7 @@ export async function indexFiles(knowledgebasePath: string = './android') {
     }
   }
   
-  await scanDirectory(knowledgebasePath);
+  await scanDirectory(resolvedPath);
 }
 
 export async function getFiles(filters?: {

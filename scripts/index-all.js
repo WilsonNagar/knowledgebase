@@ -52,6 +52,10 @@ try {
   indexFiles('./golang');
   console.log('✅ Golang indexed\n');
   
+  console.log('Indexing AOSP...');
+  indexFiles('./aosp');
+  console.log('✅ AOSP indexed\n');
+  
   console.log('Indexing Computer Science...');
   indexFiles('./computer_science');
   console.log('✅ Computer Science indexed\n');

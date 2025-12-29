@@ -37,6 +37,7 @@ services:
       - ./devops:/app/devops
       - ./golang:/app/golang
       - ./kotlin:/app/kotlin
+      - ./aosp:/app/aosp
       - ./computer_science:/app/computer_science
       - ./projects:/app/projects
     environment:

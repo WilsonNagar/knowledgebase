@@ -20,6 +20,7 @@ export default function Home() {
   const [devopsRoadmap, setDevopsRoadmap] = useState<RoadmapType | null>(null);
   const [backendRoadmap, setBackendRoadmap] = useState<RoadmapType | null>(null);
   const [golangRoadmap, setGolangRoadmap] = useState<RoadmapType | null>(null);
+  const [aospRoadmap, setAospRoadmap] = useState<RoadmapType | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -78,6 +79,18 @@ export default function Home() {
           }
         }
         
+        // Fetch AOSP roadmap
+        const aospKb = kbData.knowledgebases?.find((kb: KnowledgeBaseMetadata) => kb.name === 'aosp');
+        if (aospKb) {
+          try {
+            const roadmapRes = await fetch('/api/roadmap?knowledgebase=aosp');
+            const roadmapData = await roadmapRes.json();
+            setAospRoadmap(roadmapData.roadmap);
+          } catch (err) {
+            console.error('Error fetching AOSP roadmap:', err);
+          }
+        }
+        
         // Fetch topics for computer_science
         const csKb = kbData.knowledgebases?.find((kb: KnowledgeBaseMetadata) => kb.name === 'computer_science');
         if (csKb) {
@@ -116,12 +129,12 @@ export default function Home() {
       </div>
 
       {/* Main Knowledge Bases */}
-      {knowledgebases.filter(kb => ['android', 'devops', 'backend', 'golang'].includes(kb.name)).length > 0 && (
+      {knowledgebases.filter(kb => ['android', 'devops', 'backend', 'golang', 'aosp'].includes(kb.name)).length > 0 && (
         <div className="mb-8">
           <h2 className="text-2xl font-semibold text-gray-900 mb-4">Main Knowledge Bases</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {knowledgebases
-              .filter(kb => ['android', 'devops', 'backend', 'golang'].includes(kb.name))
+              .filter(kb => ['android', 'devops', 'backend', 'golang', 'aosp'].includes(kb.name))
               .map((kb) => (
                 <Link
                   key={kb.name}
@@ -133,6 +146,7 @@ export default function Home() {
                      kb.name === 'devops' ? 'DevOps' :
                      kb.name === 'backend' ? 'Backend Development' :
                      kb.name === 'golang' ? 'Go Programming' :
+                     kb.name === 'aosp' ? 'AOSP (Android Open Source Project)' :
                      kb.name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                   </h3>
                   <p className="text-gray-600 mb-4">
@@ -243,6 +257,11 @@ export default function Home() {
           {golangRoadmap && (
             <div>
               <Roadmap roadmap={golangRoadmap} compact={true} />
+            </div>
+          )}
+          {aospRoadmap && (
+            <div>
+              <Roadmap roadmap={aospRoadmap} compact={true} />
             </div>
           )}
           {computerScienceTopics.slice(0, 2).map((topic) => (
