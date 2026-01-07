@@ -12,6 +12,17 @@ const customJestConfig = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
   },
+  // Transform ES modules from unified/remark/rehype ecosystem
+  // The pattern uses negative lookahead to exclude these packages from being ignored
+  // This tells Jest to transform these packages instead of ignoring them
+  transformIgnorePatterns: [
+    'node_modules/(?!(remark-gfm|unified|remark-parse|remark-rehype|rehype-highlight|rehype-raw|rehype-stringify|rehype-slug|unist-util-visit)/)',
+  ],
+  // Ensure Next.js transformer handles .js files from these packages
+  testMatch: [
+    '**/__tests__/**/*.[jt]s?(x)',
+    '**/?(*.)+(spec|test).[jt]s?(x)',
+  ],
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async

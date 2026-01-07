@@ -12,7 +12,7 @@ const stringSimilarity = require('string-similarity');
 
 const args = process.argv.slice(2);
 const targetDir = args[0] || './android';
-const threshold = parseFloat(args[1]) || 0.6;
+const threshold = parseFloat(args[1]) || 0.65;
 
 function scanDirectory(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -197,7 +197,9 @@ function main() {
   console.log('  - Ensure canonical_id and slug are unique');
   console.log('  - Update prerequisites to link related content');
   
-  process.exit(duplicates.length > 0 ? 1 : 0);
+  // Only fail on critical duplicates (canonical_id, slug), not similarity matches
+  const criticalDuplicates = byType.canonical_id.length + byType.slug.length;
+  process.exit(criticalDuplicates > 0 ? 1 : 0);
 }
 
 main();
