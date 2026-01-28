@@ -10,7 +10,8 @@
     "test": "jest",
     "setup-db": "node scripts/setup-db.js",
     "check-duplicates": "node scripts/check-duplicates.js",
-    "renumber": "node scripts/renumber.js"
+    "renumber": "node scripts/renumber.js",
+    "rebuild-docker": "bash scripts/rebuild-docker.sh"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.15",

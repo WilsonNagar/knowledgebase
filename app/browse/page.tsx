@@ -15,6 +15,7 @@ function BrowseContent() {
   const [knowledgebases, setKnowledgebases] = useState<KnowledgeBaseMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [readStatuses, setReadStatuses] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const fetchData = async () => {
@@ -34,6 +35,17 @@ function BrowseContent() {
         const res = await fetch(`/api/files?${params.toString()}`);
         const data = await res.json();
         setFiles(data.files || []);
+        
+        // Load read statuses from localStorage
+        if (typeof window !== 'undefined' && data.files) {
+          const readSet = new Set<string>();
+          data.files.forEach((file: KnowledgeFile) => {
+            if (localStorage.getItem(`read-${file.canonical_id}`) === 'true') {
+              readSet.add(file.canonical_id);
+            }
+          });
+          setReadStatuses(readSet);
+        }
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -43,6 +55,68 @@ function BrowseContent() {
 
     fetchData();
   }, [level, knowledgebase, topic]);
+
+  // Refresh read statuses when files change or component mounts
+  useEffect(() => {
+    if (typeof window === 'undefined' || files.length === 0) return;
+    
+    const refreshReadStatuses = () => {
+      const readSet = new Set<string>();
+      files.forEach((file: KnowledgeFile) => {
+        if (localStorage.getItem(`read-${file.canonical_id}`) === 'true') {
+          readSet.add(file.canonical_id);
+        }
+      });
+      setReadStatuses(readSet);
+    };
+    
+    refreshReadStatuses();
+    
+    // Also refresh when window gains focus (user navigates back)
+    const handleFocus = () => {
+      refreshReadStatuses();
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [files]);
+
+  // Listen for storage changes (e.g., when marked as read in another tab)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const handleStorageChange = () => {
+      if (files.length > 0) {
+        const readSet = new Set<string>();
+        files.forEach((file: KnowledgeFile) => {
+          if (localStorage.getItem(`read-${file.canonical_id}`) === 'true') {
+            readSet.add(file.canonical_id);
+          }
+        });
+        setReadStatuses(readSet);
+      }
+    };
+
+    // Listen for visibility change (when user navigates back to tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleStorageChange();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    // Also listen for custom events (for same-tab updates)
+    window.addEventListener('readStatusChanged', handleStorageChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('readStatusChanged', handleStorageChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [files]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +132,17 @@ function BrowseContent() {
       const res = await fetch(`/api/search?${params.toString()}`);
       const data = await res.json();
       setFiles(data.files || []);
+      
+      // Load read statuses from localStorage
+      if (typeof window !== 'undefined' && data.files) {
+        const readSet = new Set<string>();
+        data.files.forEach((file: KnowledgeFile) => {
+          if (localStorage.getItem(`read-${file.canonical_id}`) === 'true') {
+            readSet.add(file.canonical_id);
+          }
+        });
+        setReadStatuses(readSet);
+      }
     } catch (error) {
       console.error('Error searching:', error);
     } finally {
@@ -229,40 +314,58 @@ function BrowseContent() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {files.map((file) => (
-            <Link
-              key={file.canonical_id}
-              href={`/read/${file.slug}?knowledgebase=${file.knowledgebase || knowledgebase}`}
-              className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <span className="text-sm font-mono text-gray-500">
-                  #{file.number}
-                </span>
-                <span className={`px-2 py-1 rounded text-xs font-semibold ${getLevelColor(file.level)}`}>
-                  {file.level}
-                </span>
-              </div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                {file.title}
-              </h2>
-              <p className="text-sm text-gray-600 mb-4 line-clamp-2">
-                {file.content.substring(0, 150)}...
-              </p>
-              <div className="flex items-center justify-between text-sm text-gray-500">
-                <span>⏱️ {file.estimated_minutes} min</span>
-                {file.tags && (
-                  <div className="flex gap-1 flex-wrap">
-                    {file.tags.split(',').slice(0, 2).map((tag, i) => (
-                      <span key={i} className="px-2 py-0.5 bg-gray-100 rounded">
-                        {tag.trim()}
-                      </span>
-                    ))}
+          {files.map((file) => {
+            const isRead = readStatuses.has(file.canonical_id);
+            return (
+              <Link
+                key={file.canonical_id}
+                href={`/read/${file.slug}?knowledgebase=${file.knowledgebase || knowledgebase}`}
+                className={`rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow relative ${
+                  isRead 
+                    ? 'bg-green-50 border-2 border-green-200' 
+                    : 'bg-white'
+                }`}
+              >
+                {isRead && (
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2">
+                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-600 text-white flex items-center gap-1">
+                      <span>✓</span> Completed
+                    </span>
                   </div>
                 )}
-              </div>
-            </Link>
-          ))}
+                <div className="flex items-start justify-between mb-2">
+                  <span className="text-sm font-mono text-gray-500">
+                    #{file.number}
+                  </span>
+                  <span className={`px-2 py-1 rounded text-xs font-semibold ${getLevelColor(file.level)}`}>
+                    {file.level}
+                  </span>
+                </div>
+                <h2 className={`text-xl font-semibold mb-2 ${
+                  isRead ? 'text-green-900' : 'text-gray-900'
+                }`}>
+                  {file.title}
+                </h2>
+                <p className={`text-sm mb-4 line-clamp-2 ${
+                  isRead ? 'text-green-700' : 'text-gray-600'
+                }`}>
+                  {file.content.substring(0, 150)}...
+                </p>
+                <div className="flex items-center justify-between text-sm text-gray-500">
+                  <span>⏱️ {file.estimated_minutes} min</span>
+                  {file.tags && (
+                    <div className="flex gap-1 flex-wrap">
+                      {file.tags.split(',').slice(0, 2).map((tag, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-gray-100 rounded">
+                          {tag.trim()}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

@@ -24,6 +24,7 @@ export default function ReadPage() {
   const [loading, setLoading] = useState(true);
   const [toc, setToc] = useState<TOCItem[]>([]);
   const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
+  const [isRead, setIsRead] = useState(false);
 
   useEffect(() => {
     const fetchFile = async () => {
@@ -32,6 +33,12 @@ export default function ReadPage() {
         const res = await fetch(`/api/files/${slug}?knowledgebase=${knowledgebase}`);
         const data = await res.json();
         setFile(data.file);
+        
+        // Check read status from localStorage
+        if (data.file?.canonical_id && typeof window !== 'undefined') {
+          const readStatus = localStorage.getItem(`read-${data.file.canonical_id}`);
+          setIsRead(readStatus === 'true');
+        }
         
         // Extract quiz from content
         const quizMatch = data.file.content.match(/## Quiz\s+([\s\S]*?)(?=\n## |$)/);
@@ -49,6 +56,19 @@ export default function ReadPage() {
 
     fetchFile();
   }, [slug, knowledgebase]);
+
+  const toggleReadStatus = () => {
+    if (!file?.canonical_id) return;
+    
+    const newReadStatus = !isRead;
+    setIsRead(newReadStatus);
+    localStorage.setItem(`read-${file.canonical_id}`, String(newReadStatus));
+    
+    // Dispatch custom event to update other components
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('readStatusChanged'));
+    }
+  };
 
   const parseQuiz = (content: string) => {
     const questions: any[] = [];
@@ -137,6 +157,11 @@ export default function ReadPage() {
           <span className="text-sm text-gray-500">
             ⏱️ {file.estimated_minutes} min read
           </span>
+          {isRead && (
+            <span className="px-3 py-1 rounded text-sm font-semibold bg-green-100 text-green-800 flex items-center gap-1">
+              <span>✓</span> Completed
+            </span>
+          )}
         </div>
         <h1 className="text-4xl font-bold text-gray-900 mb-4">{file.title}</h1>
         {file.tags && (
@@ -174,8 +199,15 @@ export default function ReadPage() {
           <div className="bg-white rounded-lg shadow-md p-6 mt-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions</h3>
             <div className="space-y-2">
-              <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                Mark as Learned
+              <button 
+                onClick={toggleReadStatus}
+                className={`w-full px-4 py-2 rounded-lg transition-colors ${
+                  isRead 
+                    ? 'bg-green-600 text-white hover:bg-green-700' 
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {isRead ? '✓ Completed reading' : 'Mark as Read'}
               </button>
               <button className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
                 Add Note
