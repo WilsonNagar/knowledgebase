@@ -18,6 +18,7 @@ function BrowseContent() {
   const [readStatuses, setReadStatuses] = useState<Set<string>>(new Set());
   const [bookmarkStatuses, setBookmarkStatuses] = useState<Set<string>>(new Set());
   const [showBookmarks, setShowBookmarks] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -207,90 +208,19 @@ function BrowseContent() {
     router.push(`/browse?${params.toString()}`);
   };
 
-  // Get all bookmarked files from localStorage
-  const getAllBookmarkedFiles = async () => {
-    if (typeof window === 'undefined') return [];
+  // Filter files based on active filters
+  const getFilteredFiles = () => {
+    let filtered = files;
     
-    // Get all bookmark keys from localStorage
-    const bookmarkKeys: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('bookmark-') && localStorage.getItem(key) === 'true') {
-        const canonicalId = key.replace('bookmark-', '');
-        bookmarkKeys.push(canonicalId);
-      }
+    if (showBookmarks) {
+      filtered = filtered.filter((file) => bookmarkStatuses.has(file.canonical_id));
     }
     
-    if (bookmarkKeys.length === 0) return [];
+    if (showCompleted) {
+      filtered = filtered.filter((file) => readStatuses.has(file.canonical_id));
+    }
     
-    // Fetch all files and filter by bookmarked canonical_ids
-    try {
-      const res = await fetch('/api/files');
-      const data = await res.json();
-      const allFiles = data.files || [];
-      return allFiles.filter((file: KnowledgeFile) => bookmarkKeys.includes(file.canonical_id));
-    } catch (error) {
-      console.error('Error fetching bookmarked files:', error);
-      return [];
-    }
-  };
-
-  // Handle bookmark tab toggle
-  const handleBookmarkToggle = async () => {
-    if (!showBookmarks) {
-      setLoading(true);
-      const bookmarkedFiles = await getAllBookmarkedFiles();
-      setFiles(bookmarkedFiles);
-      
-      // Load bookmark statuses
-      if (typeof window !== 'undefined') {
-        const bookmarkSet = new Set<string>();
-        bookmarkedFiles.forEach((file: KnowledgeFile) => {
-          if (localStorage.getItem(`bookmark-${file.canonical_id}`) === 'true') {
-            bookmarkSet.add(file.canonical_id);
-          }
-        });
-        setBookmarkStatuses(bookmarkSet);
-      }
-      setLoading(false);
-    } else {
-      // Reload normal files
-      const fetchData = async () => {
-        setLoading(true);
-        try {
-          const params = new URLSearchParams();
-          if (level) params.set('level', level);
-          if (knowledgebase) params.set('knowledgebase', knowledgebase);
-          if (topic) params.set('topic', topic);
-          
-          const res = await fetch(`/api/files?${params.toString()}`);
-          const data = await res.json();
-          setFiles(data.files || []);
-          
-          // Load read statuses and bookmark statuses from localStorage
-          if (typeof window !== 'undefined' && data.files) {
-            const readSet = new Set<string>();
-            const bookmarkSet = new Set<string>();
-            data.files.forEach((file: KnowledgeFile) => {
-              if (localStorage.getItem(`read-${file.canonical_id}`) === 'true') {
-                readSet.add(file.canonical_id);
-              }
-              if (localStorage.getItem(`bookmark-${file.canonical_id}`) === 'true') {
-                bookmarkSet.add(file.canonical_id);
-              }
-            });
-            setReadStatuses(readSet);
-            setBookmarkStatuses(bookmarkSet);
-          }
-        } catch (error) {
-          console.error('Error fetching data:', error);
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchData();
-    }
-    setShowBookmarks(!showBookmarks);
+    return filtered;
   };
 
   return (
@@ -298,24 +228,35 @@ function BrowseContent() {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-3xl font-bold text-gray-900">
-            {showBookmarks 
-              ? '🔖 Bookmarked Pages'
-              : topic 
-                ? `Browse ${topic.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}`
-                : 'Browse Knowledge Base'
+            {topic 
+              ? `Browse ${topic.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}`
+              : 'Browse Knowledge Base'
             }
           </h1>
-          <button
-            onClick={handleBookmarkToggle}
-            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-              showBookmarks
-                ? 'bg-yellow-500 text-white hover:bg-yellow-600'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            <span>🔖</span>
-            <span>{showBookmarks ? 'Show All' : 'Bookmarks'}</span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowCompleted(!showCompleted)}
+              className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                showCompleted
+                  ? 'bg-green-500 text-white hover:bg-green-600'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              <span>✓</span>
+              <span>Completed</span>
+            </button>
+            <button
+              onClick={() => setShowBookmarks(!showBookmarks)}
+              className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                showBookmarks
+                  ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              <span>🔖</span>
+              <span>Bookmarks</span>
+            </button>
+          </div>
         </div>
         
         {/* Knowledge Base Selector */}
@@ -357,8 +298,7 @@ function BrowseContent() {
           </div>
         )}
 
-        {!showBookmarks && (
-          <form onSubmit={handleSearch} className="mb-6">
+        <form onSubmit={handleSearch} className="mb-6">
           <div className="flex gap-2">
             <input
               type="text"
@@ -387,10 +327,8 @@ function BrowseContent() {
             )}
           </div>
         </form>
-        )}
 
-        {!showBookmarks && (
-          <div className="flex gap-2 flex-wrap mb-4">
+        <div className="flex gap-2 flex-wrap mb-4">
           <Link
             href={buildBrowseUrl(null)}
             className={`px-4 py-2 rounded-lg ${
@@ -432,18 +370,20 @@ function BrowseContent() {
             Overachiever
           </Link>
         </div>
-        )}
       </div>
 
       {loading ? (
         <div className="text-center py-12">Loading...</div>
-      ) : files.length === 0 ? (
+      ) : getFilteredFiles().length === 0 ? (
         <div className="text-center py-12 text-gray-500">
-          No files found. {searchQuery && 'Try a different search query.'}
+          {showBookmarks || showCompleted 
+            ? 'No files match the selected filters.'
+            : 'No files found. ' + (searchQuery ? 'Try a different search query.' : '')
+          }
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {files.map((file) => {
+          {getFilteredFiles().map((file) => {
             const isRead = readStatuses.has(file.canonical_id);
             return (
               <Link
