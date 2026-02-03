@@ -25,6 +25,7 @@ export default function ReadPage() {
   const [toc, setToc] = useState<TOCItem[]>([]);
   const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
   const [isRead, setIsRead] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(false);
 
   useEffect(() => {
     const fetchFile = async () => {
@@ -34,10 +35,13 @@ export default function ReadPage() {
         const data = await res.json();
         setFile(data.file);
         
-        // Check read status from localStorage
+        // Check read status and bookmark status from localStorage
         if (data.file?.canonical_id && typeof window !== 'undefined') {
           const readStatus = localStorage.getItem(`read-${data.file.canonical_id}`);
           setIsRead(readStatus === 'true');
+          
+          const bookmarkStatus = localStorage.getItem(`bookmark-${data.file.canonical_id}`);
+          setIsBookmarked(bookmarkStatus === 'true');
         }
         
         // Extract quiz from content
@@ -67,6 +71,19 @@ export default function ReadPage() {
     // Dispatch custom event to update other components
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('readStatusChanged'));
+    }
+  };
+
+  const toggleBookmark = () => {
+    if (!file?.canonical_id) return;
+    
+    const newBookmarkStatus = !isBookmarked;
+    setIsBookmarked(newBookmarkStatus);
+    localStorage.setItem(`bookmark-${file.canonical_id}`, String(newBookmarkStatus));
+    
+    // Dispatch custom event to update other components
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('bookmarkStatusChanged'));
     }
   };
 
@@ -212,8 +229,15 @@ export default function ReadPage() {
               <button className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
                 Add Note
               </button>
-              <button className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
-                Bookmark
+              <button 
+                onClick={toggleBookmark}
+                className={`w-full px-4 py-2 rounded-lg transition-colors ${
+                  isBookmarked 
+                    ? 'bg-yellow-500 text-white hover:bg-yellow-600' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                {isBookmarked ? '🔖 Bookmarked' : '🔖 Bookmark'}
               </button>
             </div>
           </div>

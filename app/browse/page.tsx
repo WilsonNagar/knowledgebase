@@ -16,6 +16,8 @@ function BrowseContent() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [readStatuses, setReadStatuses] = useState<Set<string>>(new Set());
+  const [bookmarkStatuses, setBookmarkStatuses] = useState<Set<string>>(new Set());
+  const [showBookmarks, setShowBookmarks] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -36,15 +38,20 @@ function BrowseContent() {
         const data = await res.json();
         setFiles(data.files || []);
         
-        // Load read statuses from localStorage
+        // Load read statuses and bookmark statuses from localStorage
         if (typeof window !== 'undefined' && data.files) {
           const readSet = new Set<string>();
+          const bookmarkSet = new Set<string>();
           data.files.forEach((file: KnowledgeFile) => {
             if (localStorage.getItem(`read-${file.canonical_id}`) === 'true') {
               readSet.add(file.canonical_id);
             }
+            if (localStorage.getItem(`bookmark-${file.canonical_id}`) === 'true') {
+              bookmarkSet.add(file.canonical_id);
+            }
           });
           setReadStatuses(readSet);
+          setBookmarkStatuses(bookmarkSet);
         }
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -56,25 +63,30 @@ function BrowseContent() {
     fetchData();
   }, [level, knowledgebase, topic]);
 
-  // Refresh read statuses when files change or component mounts
+  // Refresh read statuses and bookmark statuses when files change or component mounts
   useEffect(() => {
     if (typeof window === 'undefined' || files.length === 0) return;
     
-    const refreshReadStatuses = () => {
+    const refreshStatuses = () => {
       const readSet = new Set<string>();
+      const bookmarkSet = new Set<string>();
       files.forEach((file: KnowledgeFile) => {
         if (localStorage.getItem(`read-${file.canonical_id}`) === 'true') {
           readSet.add(file.canonical_id);
         }
+        if (localStorage.getItem(`bookmark-${file.canonical_id}`) === 'true') {
+          bookmarkSet.add(file.canonical_id);
+        }
       });
       setReadStatuses(readSet);
+      setBookmarkStatuses(bookmarkSet);
     };
     
-    refreshReadStatuses();
+    refreshStatuses();
     
     // Also refresh when window gains focus (user navigates back)
     const handleFocus = () => {
-      refreshReadStatuses();
+      refreshStatuses();
     };
     
     window.addEventListener('focus', handleFocus);
@@ -90,12 +102,17 @@ function BrowseContent() {
     const handleStorageChange = () => {
       if (files.length > 0) {
         const readSet = new Set<string>();
+        const bookmarkSet = new Set<string>();
         files.forEach((file: KnowledgeFile) => {
           if (localStorage.getItem(`read-${file.canonical_id}`) === 'true') {
             readSet.add(file.canonical_id);
           }
+          if (localStorage.getItem(`bookmark-${file.canonical_id}`) === 'true') {
+            bookmarkSet.add(file.canonical_id);
+          }
         });
         setReadStatuses(readSet);
+        setBookmarkStatuses(bookmarkSet);
       }
     };
 
@@ -109,11 +126,13 @@ function BrowseContent() {
     window.addEventListener('storage', handleStorageChange);
     // Also listen for custom events (for same-tab updates)
     window.addEventListener('readStatusChanged', handleStorageChange);
+    window.addEventListener('bookmarkStatusChanged', handleStorageChange);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('readStatusChanged', handleStorageChange);
+      window.removeEventListener('bookmarkStatusChanged', handleStorageChange);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [files]);
@@ -133,15 +152,20 @@ function BrowseContent() {
       const data = await res.json();
       setFiles(data.files || []);
       
-      // Load read statuses from localStorage
+      // Load read statuses and bookmark statuses from localStorage
       if (typeof window !== 'undefined' && data.files) {
         const readSet = new Set<string>();
+        const bookmarkSet = new Set<string>();
         data.files.forEach((file: KnowledgeFile) => {
           if (localStorage.getItem(`read-${file.canonical_id}`) === 'true') {
             readSet.add(file.canonical_id);
           }
+          if (localStorage.getItem(`bookmark-${file.canonical_id}`) === 'true') {
+            bookmarkSet.add(file.canonical_id);
+          }
         });
         setReadStatuses(readSet);
+        setBookmarkStatuses(bookmarkSet);
       }
     } catch (error) {
       console.error('Error searching:', error);
@@ -183,15 +207,116 @@ function BrowseContent() {
     router.push(`/browse?${params.toString()}`);
   };
 
+  // Get all bookmarked files from localStorage
+  const getAllBookmarkedFiles = async () => {
+    if (typeof window === 'undefined') return [];
+    
+    // Get all bookmark keys from localStorage
+    const bookmarkKeys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('bookmark-') && localStorage.getItem(key) === 'true') {
+        const canonicalId = key.replace('bookmark-', '');
+        bookmarkKeys.push(canonicalId);
+      }
+    }
+    
+    if (bookmarkKeys.length === 0) return [];
+    
+    // Fetch all files and filter by bookmarked canonical_ids
+    try {
+      const res = await fetch('/api/files');
+      const data = await res.json();
+      const allFiles = data.files || [];
+      return allFiles.filter((file: KnowledgeFile) => bookmarkKeys.includes(file.canonical_id));
+    } catch (error) {
+      console.error('Error fetching bookmarked files:', error);
+      return [];
+    }
+  };
+
+  // Handle bookmark tab toggle
+  const handleBookmarkToggle = async () => {
+    if (!showBookmarks) {
+      setLoading(true);
+      const bookmarkedFiles = await getAllBookmarkedFiles();
+      setFiles(bookmarkedFiles);
+      
+      // Load bookmark statuses
+      if (typeof window !== 'undefined') {
+        const bookmarkSet = new Set<string>();
+        bookmarkedFiles.forEach((file: KnowledgeFile) => {
+          if (localStorage.getItem(`bookmark-${file.canonical_id}`) === 'true') {
+            bookmarkSet.add(file.canonical_id);
+          }
+        });
+        setBookmarkStatuses(bookmarkSet);
+      }
+      setLoading(false);
+    } else {
+      // Reload normal files
+      const fetchData = async () => {
+        setLoading(true);
+        try {
+          const params = new URLSearchParams();
+          if (level) params.set('level', level);
+          if (knowledgebase) params.set('knowledgebase', knowledgebase);
+          if (topic) params.set('topic', topic);
+          
+          const res = await fetch(`/api/files?${params.toString()}`);
+          const data = await res.json();
+          setFiles(data.files || []);
+          
+          // Load read statuses and bookmark statuses from localStorage
+          if (typeof window !== 'undefined' && data.files) {
+            const readSet = new Set<string>();
+            const bookmarkSet = new Set<string>();
+            data.files.forEach((file: KnowledgeFile) => {
+              if (localStorage.getItem(`read-${file.canonical_id}`) === 'true') {
+                readSet.add(file.canonical_id);
+              }
+              if (localStorage.getItem(`bookmark-${file.canonical_id}`) === 'true') {
+                bookmarkSet.add(file.canonical_id);
+              }
+            });
+            setReadStatuses(readSet);
+            setBookmarkStatuses(bookmarkSet);
+          }
+        } catch (error) {
+          console.error('Error fetching data:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchData();
+    }
+    setShowBookmarks(!showBookmarks);
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">
-          {topic 
-            ? `Browse ${topic.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}`
-            : 'Browse Knowledge Base'
-          }
-        </h1>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-3xl font-bold text-gray-900">
+            {showBookmarks 
+              ? '🔖 Bookmarked Pages'
+              : topic 
+                ? `Browse ${topic.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}`
+                : 'Browse Knowledge Base'
+            }
+          </h1>
+          <button
+            onClick={handleBookmarkToggle}
+            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+              showBookmarks
+                ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            <span>🔖</span>
+            <span>{showBookmarks ? 'Show All' : 'Bookmarks'}</span>
+          </button>
+        </div>
         
         {/* Knowledge Base Selector */}
         {!topic && (
@@ -232,7 +357,8 @@ function BrowseContent() {
           </div>
         )}
 
-        <form onSubmit={handleSearch} className="mb-6">
+        {!showBookmarks && (
+          <form onSubmit={handleSearch} className="mb-6">
           <div className="flex gap-2">
             <input
               type="text"
@@ -261,8 +387,10 @@ function BrowseContent() {
             )}
           </div>
         </form>
+        )}
 
-        <div className="flex gap-2 flex-wrap mb-4">
+        {!showBookmarks && (
+          <div className="flex gap-2 flex-wrap mb-4">
           <Link
             href={buildBrowseUrl(null)}
             className={`px-4 py-2 rounded-lg ${
@@ -304,6 +432,7 @@ function BrowseContent() {
             Overachiever
           </Link>
         </div>
+        )}
       </div>
 
       {loading ? (
