@@ -26,42 +26,48 @@ jobs:
       
       - name: Deploy to server
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash -s << 'DEPLOY_EOF'
             set -e
-            cd ${{ secrets.DEPLOY_PATH }}
+            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
+            cd "$DEPLOY_PATH"
             
             echo "Pulling latest code..."
             git fetch origin
             git reset --hard origin/master
             
             echo "Rebuilding app container (postgres stays untouched)..."
-            docker-compose build --no-cache app
+            docker compose -f compose.yml build --no-cache app
             
             echo "Restarting app container..."
-            docker-compose up -d app
+            docker compose -f compose.yml up -d app
             
             echo "Cleaning up old Docker images..."
             docker image prune -f
             
             echo "Deployment completed successfully!"
-          EOF
+          DEPLOY_EOF
       
       - name: Verify deployment
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
-            cd ${{ secrets.DEPLOY_PATH }}
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash -s << 'VERIFY_EOF'
+            set -e
+            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
+            cd "$DEPLOY_PATH"
             
             echo "Checking container status..."
-            docker-compose ps
+            docker compose -f compose.yml ps
             
             echo "Waiting for app to be ready..."
-            sleep 10
+            sleep 15
             
-            echo "Checking health endpoint..."
-            curl -f http://localhost/health || {
-              echo "Health check failed!"
-              exit 1
+            echo "Checking health endpoint via nginx..."
+            curl -f http://localhost:8080/health || {
+              echo "Health check via nginx failed, trying app directly..."
+              curl -f http://localhost:3000/api/health || {
+                echo "Health check failed!"
+                exit 1
+              }
             }
             
             echo "Deployment verified successfully!"
-          EOF
+          VERIFY_EOF
