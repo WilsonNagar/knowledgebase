@@ -60,7 +60,9 @@ npm install
 npm run setup-db
 ```
 
-This will scan the `android/` directory and index all Markdown files into SQLite.
+This will scan knowledge base directories and index all Markdown files into PostgreSQL.
+
+**Note**: For local development without Docker, you'll need a PostgreSQL database running. For Docker deployment, the database is automatically set up.
 
 4. Start the development server:
 ```bash
@@ -71,12 +73,141 @@ npm run dev
 
 ### Using Docker
 
-1. Build and start containers:
+This project uses a multi-container Docker setup with clear separation between services:
+
+- **PostgreSQL**: Database service (persists data, doesn't need rebuilding)
+- **App**: Next.js application (frontend + backend API routes)
+- **Nginx**: Reverse proxy for routing
+- **Init**: One-time initialization service for indexing content
+
+#### Quick Start
+
+1. **Create environment file** (optional, uses defaults if not provided):
 ```bash
-docker-compose up -d
+# Create .env file with your configuration
+cat > .env << EOF
+POSTGRES_USER=knowledgebase
+POSTGRES_PASSWORD=your_secure_password
+POSTGRES_DB=knowledgebase
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_DATA_PATH=./data/postgres
+APP_CONTAINER_NAME=knowledgebase-app
+POSTGRES_CONTAINER_NAME=knowledgebase-postgres
+NGINX_CONTAINER_NAME=knowledgebase-nginx
+APP_PORT=3000
+NGINX_PORT=80
+NODE_ENV=production
+AUTO_INDEX=true
+EOF
 ```
 
-2. Access the application at [http://localhost:3000](http://localhost:3000)
+2. **Build and start all containers**:
+```bash
+docker-compose up -d --build
+```
+
+3. **Check container status**:
+```bash
+docker-compose ps
+```
+
+4. **View logs**:
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f app
+docker-compose logs -f postgres
+```
+
+5. **Access the application**:
+   - Via Nginx: [http://localhost](http://localhost) (port 80)
+   - Direct app access: [http://localhost:3000](http://localhost:3000)
+   - PostgreSQL: `localhost:5432`
+
+#### Updating Code (Rebuilding Only App Container)
+
+When you make code changes, you only need to rebuild the app container. The PostgreSQL container will remain untouched, preserving your data:
+
+```bash
+# Rebuild and restart only the app container
+docker-compose up -d --build app
+
+# Or rebuild without cache for a clean build
+docker-compose build --no-cache app
+docker-compose up -d app
+```
+
+#### Managing Services
+
+```bash
+# Stop all services
+docker-compose down
+
+# Stop services but keep volumes (preserves database)
+docker-compose stop
+
+# Remove everything including volumes (⚠️ deletes database)
+docker-compose down -v
+
+# Restart a specific service
+docker-compose restart app
+
+# View resource usage
+docker-compose stats
+```
+
+#### Database Management
+
+The PostgreSQL data is persisted in `./data/postgres` (or your configured `POSTGRES_DATA_PATH`). This means:
+- Database survives container rebuilds
+- You can backup by copying the `data/postgres` directory
+- Database migrations only run when needed (schema auto-initializes)
+
+**Backup database**:
+```bash
+# Using pg_dump
+docker-compose exec postgres pg_dump -U knowledgebase knowledgebase > backup.sql
+
+# Or backup the data directory
+tar czf postgres_backup_$(date +%Y%m%d).tar.gz -C ./data/postgres .
+```
+
+**Restore database**:
+```bash
+# From SQL dump
+docker-compose exec -T postgres psql -U knowledgebase knowledgebase < backup.sql
+
+# Or restore data directory
+tar xzf postgres_backup_YYYYMMDD.tar.gz -C ./data/postgres
+```
+
+#### Indexing Content
+
+Content is automatically indexed on first startup. To manually reindex:
+
+```bash
+# Via API (after containers are running)
+curl -X POST http://localhost/api/index -H "Content-Type: application/json" -d '{"knowledgebase": "android"}'
+
+# Or run init container again
+docker-compose run --rm init
+```
+
+#### Production Deployment
+
+For production, consider:
+
+1. **Remove volume mounts** from `docker-compose.yml` (lines 34-42) to use baked-in content
+2. **Use strong passwords** in `.env` file
+3. **Set up SSL/TLS** with Let's Encrypt (update nginx.conf)
+4. **Configure backups** for PostgreSQL data
+5. **Use Docker secrets** for sensitive data
+6. **Set resource limits** in docker-compose.yml
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for CI/CD and automated deployment instructions.
 
 ## File Format
 
@@ -222,34 +353,43 @@ npm run test:watch
 
 ## Deployment
 
+### Docker (Recommended)
+
+See the [Using Docker](#using-docker) section above for detailed instructions.
+
+**Quick deployment**:
+```bash
+docker-compose up -d --build
+```
+
+### Manual (Local Development)
+
+```bash
+npm install
+npm run build
+npm run start
+```
+
 ### Vercel/Netlify
 
+For serverless deployment:
 1. Push to GitHub
 2. Connect repository to Vercel/Netlify
-3. Set environment variables if needed
+3. Set environment variables (database connection, etc.)
 4. Deploy
 
-### Docker
-
-```bash
-docker-compose up -d
-```
-
-### Manual
-
-```bash
-npm run build
-npm run serve
-```
+**Note**: Serverless deployments require a separate PostgreSQL database (e.g., Supabase, Railway, or AWS RDS).
 
 ## Technology Stack
 
-- **Frontend**: Next.js 14 (App Router), React, TypeScript, Tailwind CSS
+- **Frontend**: Next.js 15 (App Router), React, TypeScript, Tailwind CSS
 - **Backend**: Next.js API Routes
-- **Database**: SQLite with FTS5 for full-text search
+- **Database**: PostgreSQL 16 with full-text search (GIN indexes)
 - **Markdown**: remark, rehype, highlight.js
 - **Diagrams**: Mermaid.js
-- **Search**: SQLite FTS5, fuzzy matching with string-similarity
+- **Search**: PostgreSQL full-text search, fuzzy matching with string-similarity
+- **Containerization**: Docker, Docker Compose
+- **Reverse Proxy**: Nginx
 
 ## Contributing
 
