@@ -3,6 +3,7 @@ name: Deploy to Server
 on:
   push:
     branches:
+      - main
       - master
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
@@ -33,7 +34,7 @@ jobs:
             
             echo "Pulling latest code..."
             git fetch origin
-            git reset --hard origin/master
+            git reset --hard origin/main || git reset --hard origin/master
             
             echo "Rebuilding app container (postgres stays untouched)..."
             docker compose -f compose.yml build --no-cache app
