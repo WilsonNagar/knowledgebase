@@ -61,13 +61,10 @@ jobs:
             echo "Waiting for app to be ready..."
             sleep 15
             
-            echo "Checking health endpoint via nginx..."
-            curl -f http://localhost:8080/health || {
-              echo "Health check via nginx failed, trying app directly..."
-              curl -f http://localhost:3000/api/health || {
-                echo "Health check failed!"
-                exit 1
-              }
+            echo "Checking health endpoint..."
+            curl -f http://localhost:3001/api/health || {
+              echo "Health check failed!"
+              exit 1
             }
             
             echo "Deployment verified successfully!"
