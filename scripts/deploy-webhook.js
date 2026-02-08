@@ -100,17 +100,34 @@ async function deploy() {
     
     // Step 2: Rebuild app container
     log('Rebuilding app container...', 'blue');
-    await execAsync(
-      `cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml build --no-cache app`,
-      { timeout: 600000 } // 10 minutes timeout
-    );
+    // Try docker compose (v2) first, fallback to docker-compose (v1)
+    try {
+      await execAsync(
+        `cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml build --no-cache app`,
+        { timeout: 600000 } // 10 minutes timeout
+      );
+    } catch (error) {
+      log('docker compose failed, trying docker-compose...', 'yellow');
+      await execAsync(
+        `cd ${DEPLOY_PATH} && docker-compose -f docker-compose.yml build --no-cache app`,
+        { timeout: 600000 }
+      );
+    }
     
     // Step 3: Restart app container
     log('Restarting app container...', 'blue');
-    await execAsync(
-      `cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml up -d app`,
-      { timeout: 60000 }
-    );
+    try {
+      await execAsync(
+        `cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml up -d app`,
+        { timeout: 60000 }
+      );
+    } catch (error) {
+      log('docker compose failed, trying docker-compose...', 'yellow');
+      await execAsync(
+        `cd ${DEPLOY_PATH} && docker-compose -f docker-compose.yml up -d app`,
+        { timeout: 60000 }
+      );
+    }
     
     // Step 4: Clean up old images
     log('Cleaning up old Docker images...', 'blue');
@@ -120,10 +137,21 @@ async function deploy() {
     log('Waiting for app to be ready...', 'blue');
     await new Promise(resolve => setTimeout(resolve, 15000));
     
-    const { stdout } = await execAsync(
-      `cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml ps`,
-      { timeout: 30000 }
-    );
+    // Check container status (try both compose commands)
+    let stdout;
+    try {
+      const result = await execAsync(
+        `cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml ps`,
+        { timeout: 30000 }
+      );
+      stdout = result.stdout;
+    } catch (error) {
+      const result = await execAsync(
+        `cd ${DEPLOY_PATH} && docker-compose -f docker-compose.yml ps`,
+        { timeout: 30000 }
+      );
+      stdout = result.stdout;
+    }
     
     log('Container status:', 'blue');
     console.log(stdout);
