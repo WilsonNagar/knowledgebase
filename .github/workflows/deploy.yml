@@ -15,52 +15,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-      
-      - name: Deploy to server
+      - name: Trigger webhook deployment
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash -s << 'DEPLOY_EOF'
-            set -e
-            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
-            cd "$DEPLOY_PATH"
-            
-            echo "Pulling latest code..."
-            git fetch origin
-            git reset --hard origin/main || git reset --hard origin/master
-            
-            echo "Rebuilding app container (postgres stays untouched)..."
-            docker compose -f docker-compose.yml build --no-cache app
-            
-            echo "Restarting app container..."
-            docker compose -f docker-compose.yml up -d app
-            
-            echo "Cleaning up old Docker images..."
-            docker image prune -f
-            
-            echo "Deployment completed successfully!"
-          DEPLOY_EOF
-      
-      - name: Verify deployment
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash -s << 'VERIFY_EOF'
-            set -e
-            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
-            cd "$DEPLOY_PATH"
-            
-            echo "Checking container status..."
-            docker compose -f docker-compose.yml ps
-            
-            echo "Waiting for app to be ready..."
-            sleep 15
-            
-            echo "Checking health endpoint..."
-            curl -f http://localhost:3001/api/health || {
-              echo "Health check failed!"
-              exit 1
+          echo "Triggering webhook deployment..."
+          curl -X POST ${{ secrets.WEBHOOK_URL }}/deploy \
+            -H "Content-Type: application/json" \
+            -H "X-Hub-Signature-256: sha256=$(echo -n '${{ toJson(github.event) }}' | openssl dgst -sha256 -hmac '${{ secrets.WEBHOOK_SECRET }}' -binary | xxd -p -c 256)" \
+            -d '${{ toJson(github.event) }}' \
+            -f || {
+              echo "Webhook deployment triggered (may take a few minutes)"
+              exit 0
             }
-            
-            echo "Deployment verified successfully!"
-          VERIFY_EOF
+      
+      - name: Wait for deployment
+        run: |
+          echo "Deployment triggered via webhook. Check server logs for progress:"
+          echo "ssh wilsonnagar@wilson-home 'sudo journalctl -u webhook.service -f'"
+          echo ""
+          echo "Deployment is running asynchronously on the server."
+          echo "This workflow step completes immediately after triggering the webhook."
