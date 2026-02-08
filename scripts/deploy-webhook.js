@@ -162,6 +162,21 @@ async function deploy() {
           } else {
             log('App already on postgres network', 'green');
           }
+          
+          // Verify connection works by testing ping
+          try {
+            const pingResult = await execAsync(
+              `docker exec knowledgebase-app ping -c 1 postgres 2>&1`,
+              { timeout: 5000 }
+            );
+            if (pingResult.stdout.includes('1 packets transmitted') || pingResult.stdout.includes('seq=0')) {
+              log('✓ Verified: App can reach postgres', 'green');
+            }
+          } catch (pingError) {
+            log(`Warning: Could not verify postgres connection: ${pingError.message}`, 'yellow');
+          }
+        } else {
+          log('Warning: Could not find postgres network', 'yellow');
         }
       } catch (error) {
         log(`Warning: Could not connect to postgres network: ${error.message}`, 'yellow');
@@ -213,6 +228,21 @@ async function deploy() {
           } else {
             log('App already on postgres network', 'green');
           }
+          
+          // Verify connection works by testing ping
+          try {
+            const pingResult = await execAsync(
+              `docker exec knowledgebase-app ping -c 1 postgres 2>&1`,
+              { timeout: 5000 }
+            );
+            if (pingResult.stdout.includes('1 packets transmitted') || pingResult.stdout.includes('seq=0')) {
+              log('✓ Verified: App can reach postgres', 'green');
+            }
+          } catch (pingError) {
+            log(`Warning: Could not verify postgres connection: ${pingError.message}`, 'yellow');
+          }
+        } else {
+          log('Warning: Could not find postgres network', 'yellow');
         }
       } catch (error) {
         log(`Warning: Could not connect to postgres network: ${error.message}`, 'yellow');
