@@ -132,6 +132,41 @@ async function deploy() {
         `cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml up -d --no-deps app`,
         { timeout: 60000 }
       );
+      
+      // Connect app container to postgres network (fix for network isolation issue)
+      // This ensures app can communicate with postgres even if they're on different networks
+      log('Ensuring app can connect to postgres...', 'blue');
+      try {
+        const postgresNetworks = await execAsync(
+          `docker inspect knowledgebase-postgres --format '{{range \$net, \$conf := .NetworkSettings.Networks}}{{\$net}} {{end}}'`,
+          { timeout: 10000 }
+        );
+        const networks = postgresNetworks.stdout.trim().split(/\s+/).filter(n => n);
+        
+        // Find the network that postgres is on (should be knowledge-base_knowledgebase-network)
+        const postgresNetwork = networks.find(n => n.includes('knowledgebase-network') && !n.includes('knowledgestack'));
+        
+        if (postgresNetwork) {
+          // Check if app is already on this network
+          const appNetworks = await execAsync(
+            `docker inspect knowledgebase-app --format '{{range \$net, \$conf := .NetworkSettings.Networks}}{{\$net}} {{end}}'`,
+            { timeout: 10000 }
+          ).catch(() => ({ stdout: '' }));
+          
+          if (!appNetworks.stdout.includes(postgresNetwork)) {
+            await execAsync(
+              `docker network connect ${postgresNetwork} knowledgebase-app`,
+              { timeout: 10000 }
+            );
+            log(`App connected to postgres network: ${postgresNetwork}`, 'green');
+          } else {
+            log('App already on postgres network', 'green');
+          }
+        }
+      } catch (error) {
+        log(`Warning: Could not connect to postgres network: ${error.message}`, 'yellow');
+      }
+      
       log('App container restarted successfully', 'green');
     } catch (error) {
       log('docker compose failed, trying docker-compose...', 'yellow');
@@ -148,6 +183,41 @@ async function deploy() {
         `cd ${DEPLOY_PATH} && docker-compose -f docker-compose.yml up -d --no-deps app`,
         { timeout: 60000 }
       );
+      
+      // Connect app container to postgres network (fix for network isolation issue)
+      // This ensures app can communicate with postgres even if they're on different networks
+      log('Ensuring app can connect to postgres...', 'blue');
+      try {
+        const postgresNetworks = await execAsync(
+          `docker inspect knowledgebase-postgres --format '{{range \$net, \$conf := .NetworkSettings.Networks}}{{\$net}} {{end}}'`,
+          { timeout: 10000 }
+        );
+        const networks = postgresNetworks.stdout.trim().split(/\s+/).filter(n => n);
+        
+        // Find the network that postgres is on (should be knowledge-base_knowledgebase-network)
+        const postgresNetwork = networks.find(n => n.includes('knowledgebase-network') && !n.includes('knowledgestack'));
+        
+        if (postgresNetwork) {
+          // Check if app is already on this network
+          const appNetworks = await execAsync(
+            `docker inspect knowledgebase-app --format '{{range \$net, \$conf := .NetworkSettings.Networks}}{{\$net}} {{end}}'`,
+            { timeout: 10000 }
+          ).catch(() => ({ stdout: '' }));
+          
+          if (!appNetworks.stdout.includes(postgresNetwork)) {
+            await execAsync(
+              `docker network connect ${postgresNetwork} knowledgebase-app`,
+              { timeout: 10000 }
+            );
+            log(`App connected to postgres network: ${postgresNetwork}`, 'green');
+          } else {
+            log('App already on postgres network', 'green');
+          }
+        }
+      } catch (error) {
+        log(`Warning: Could not connect to postgres network: ${error.message}`, 'yellow');
+      }
+      
       log('App container restarted successfully (using docker-compose)', 'green');
     }
     
