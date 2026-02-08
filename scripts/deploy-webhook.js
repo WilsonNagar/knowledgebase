@@ -117,17 +117,20 @@ async function deploy() {
     // Step 3: Restart app container (only app, not postgres)
     log('Restarting app container...', 'blue');
     try {
+      // Stop and remove existing app container, then start new one
       // Use --no-deps to avoid starting dependencies like postgres
       await execAsync(
-        `cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml up -d --no-deps --build app`,
+        `cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml stop app 2>/dev/null || true && docker compose -f docker-compose.yml rm -f app 2>/dev/null || true && docker compose -f docker-compose.yml up -d --no-deps app`,
         { timeout: 60000 }
       );
+      log('App container restarted successfully', 'green');
     } catch (error) {
       log('docker compose failed, trying docker-compose...', 'yellow');
       await execAsync(
-        `cd ${DEPLOY_PATH} && docker-compose -f docker-compose.yml up -d --no-deps --build app`,
+        `cd ${DEPLOY_PATH} && docker-compose -f docker-compose.yml stop app 2>/dev/null || true && docker-compose -f docker-compose.yml rm -f app 2>/dev/null || true && docker-compose -f docker-compose.yml up -d --no-deps app`,
         { timeout: 60000 }
       );
+      log('App container restarted successfully (using docker-compose)', 'green');
     }
     
     // Step 4: Clean up old images
