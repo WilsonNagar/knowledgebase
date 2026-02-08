@@ -117,12 +117,16 @@ async function deploy() {
     // Step 3: Restart app container (only app, not postgres)
     log('Restarting app container...', 'blue');
     try {
-      // Stop and remove existing app container, then start new one
-      // Use --no-deps to avoid starting dependencies like postgres
+      // Stop and remove existing app container using direct docker commands
+      // This is more reliable than compose commands
       log('Stopping existing app container...', 'blue');
-      await execAsync(`cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml stop app`, { timeout: 30000 }).catch(() => {});
+      await execAsync(`docker stop knowledgebase-app 2>/dev/null || true`, { timeout: 30000 }).catch(() => {});
       log('Removing existing app container...', 'blue');
-      await execAsync(`cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml rm -f app`, { timeout: 30000 }).catch(() => {});
+      await execAsync(`docker rm -f knowledgebase-app 2>/dev/null || true`, { timeout: 30000 }).catch(() => {});
+      
+      // Wait a moment to ensure container is fully removed
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       log('Starting new app container...', 'blue');
       await execAsync(
         `cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml up -d --no-deps app`,
@@ -132,9 +136,13 @@ async function deploy() {
     } catch (error) {
       log('docker compose failed, trying docker-compose...', 'yellow');
       log('Stopping existing app container...', 'blue');
-      await execAsync(`cd ${DEPLOY_PATH} && docker-compose -f docker-compose.yml stop app`, { timeout: 30000 }).catch(() => {});
+      await execAsync(`docker stop knowledgebase-app 2>/dev/null || true`, { timeout: 30000 }).catch(() => {});
       log('Removing existing app container...', 'blue');
-      await execAsync(`cd ${DEPLOY_PATH} && docker-compose -f docker-compose.yml rm -f app`, { timeout: 30000 }).catch(() => {});
+      await execAsync(`docker rm -f knowledgebase-app 2>/dev/null || true`, { timeout: 30000 }).catch(() => {});
+      
+      // Wait a moment to ensure container is fully removed
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       log('Starting new app container...', 'blue');
       await execAsync(
         `cd ${DEPLOY_PATH} && docker-compose -f docker-compose.yml up -d --no-deps app`,
