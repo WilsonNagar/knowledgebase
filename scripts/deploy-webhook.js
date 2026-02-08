@@ -51,10 +51,52 @@ async function deploy() {
   log('Starting deployment...', 'blue');
   
   try {
+    // Step 0: Configure git and verify repository
+    log('Configuring git...', 'blue');
+    
+    // Set git safe directory (needed for Docker containers accessing host directories)
+    try {
+      await execAsync(`git config --global --add safe.directory ${DEPLOY_PATH}`, { timeout: 5000 });
+      log('Git safe directory configured', 'green');
+    } catch (error) {
+      log('Warning: Could not set git safe directory (may already be set)', 'yellow');
+    }
+    
+    // Disable git prompts
+    process.env.GIT_TERMINAL_PROMPT = '0';
+    process.env.GIT_ASKPASS = 'echo';
+    
+    // Verify directory exists and is a git repository
+    try {
+      await execAsync(`test -d ${DEPLOY_PATH}`, { timeout: 5000 });
+      await execAsync(`test -d ${DEPLOY_PATH}/.git`, { timeout: 5000 });
+      log('Git repository verified', 'green');
+    } catch (error) {
+      throw new Error(`Directory ${DEPLOY_PATH} is not a git repository`);
+    }
+    
     // Step 1: Pull latest code
     log('Pulling latest code...', 'blue');
-    await execAsync(`cd ${DEPLOY_PATH} && git fetch origin`, { timeout: 30000 });
-    await execAsync(`cd ${DEPLOY_PATH} && git reset --hard origin/${BRANCH}`, { timeout: 30000 });
+    try {
+      await execAsync(`cd ${DEPLOY_PATH} && git fetch origin`, { 
+        timeout: 60000,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'echo' }
+      });
+      log('Git fetch completed', 'green');
+    } catch (error) {
+      log(`Git fetch failed: ${error.message}`, 'red');
+      log('Attempting to continue with reset...', 'yellow');
+    }
+    
+    try {
+      await execAsync(`cd ${DEPLOY_PATH} && git reset --hard origin/${BRANCH}`, { 
+        timeout: 30000,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'echo' }
+      });
+      log(`Reset to origin/${BRANCH} completed`, 'green');
+    } catch (error) {
+      throw new Error(`Failed to reset to origin/${BRANCH}: ${error.message}`);
+    }
     
     // Step 2: Rebuild app container
     log('Rebuilding app container...', 'blue');
