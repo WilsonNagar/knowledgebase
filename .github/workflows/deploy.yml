@@ -8,29 +8,18 @@ on:
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
 jobs:
-  deploy:
+  notify:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Trigger webhook deployment
+      - name: Deployment Info
         run: |
-          echo "Triggering webhook deployment..."
-          curl -X POST ${{ secrets.WEBHOOK_URL }}/deploy \
-            -H "Content-Type: application/json" \
-            -H "X-Hub-Signature-256: sha256=$(echo -n '${{ toJson(github.event) }}' | openssl dgst -sha256 -hmac '${{ secrets.WEBHOOK_SECRET }}' -binary | xxd -p -c 256)" \
-            -d '${{ toJson(github.event) }}' \
-            -f || {
-              echo "Webhook deployment triggered (may take a few minutes)"
-              exit 0
-            }
-      
-      - name: Wait for deployment
-        run: |
-          echo "Deployment triggered via webhook. Check server logs for progress:"
-          echo "ssh wilsonnagar@wilson-home 'sudo journalctl -u webhook.service -f'"
+          echo "🚀 Deployment triggered!"
           echo ""
-          echo "Deployment is running asynchronously on the server."
-          echo "This workflow step completes immediately after triggering the webhook."
+          echo "This repository uses webhook-based deployment."
+          echo "GitHub automatically sends a webhook to your server when code is pushed."
+          echo ""
+          echo "📋 To view deployment logs, run on your server:"
+          echo "   ssh wilsonnagar@wilson-home 'sudo journalctl -u webhook.service -f'"
+          echo ""
+          echo "✅ Deployment is handled automatically by the webhook server."
+          echo "   No action needed - the webhook will deploy your changes."
