@@ -114,17 +114,18 @@ async function deploy() {
       );
     }
     
-    // Step 3: Restart app container
+    // Step 3: Restart app container (only app, not postgres)
     log('Restarting app container...', 'blue');
     try {
+      // Use --no-deps to avoid starting dependencies like postgres
       await execAsync(
-        `cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml up -d app`,
+        `cd ${DEPLOY_PATH} && docker compose -f docker-compose.yml up -d --no-deps --build app`,
         { timeout: 60000 }
       );
     } catch (error) {
       log('docker compose failed, trying docker-compose...', 'yellow');
       await execAsync(
-        `cd ${DEPLOY_PATH} && docker-compose -f docker-compose.yml up -d app`,
+        `cd ${DEPLOY_PATH} && docker-compose -f docker-compose.yml up -d --no-deps --build app`,
         { timeout: 60000 }
       );
     }
